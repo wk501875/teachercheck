@@ -1,0 +1,1949 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>교사 체크리스트</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+  :root {
+    --sky:#4fa8d5; --sky-light:#e8f4fb;
+    --pink:#e8728a; --gold:#f5a623;
+    --green:#5bb974; --purple:#8b6fbf;
+    --red:#e05c5c; --blue:#4a90d9;
+    --bg:#f5f8fa; --card:#ffffff;
+    --text:#2c3e50; --muted:#8a9ab0; --border:#dde8f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:12px 8px 60px;}
+
+  /* ── Buttons ── */
+  .btn{display:inline-flex;align-items:center;gap:5px;padding:8px 16px;border-radius:999px;border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:all .18s;white-space:nowrap;}
+  .btn-sky{background:var(--sky);color:white;box-shadow:0 3px 10px rgba(79,168,213,.3);}
+  .btn-sky:hover{background:#3a95c2;}
+  .btn-ghost{background:var(--bg);color:var(--text);border:2px solid var(--border);}
+  .btn-ghost:hover{border-color:var(--sky);color:var(--sky);}
+  .btn-green{background:var(--green);color:white;}
+  .btn-green:hover{background:#4aa863;}
+  .btn-pink{background:var(--pink);color:white;}
+  .btn-pink:hover{background:#d4607a;}
+  .btn-gold{background:var(--gold);color:white;}
+  .btn-gold:hover{background:#e09000;}
+  .btn-sm{padding:5px 12px;font-size:11px;}
+  .btn-lg{padding:14px 28px;font-size:15px;border-radius:16px;}
+  .btn-full{width:100%;justify-content:center;}
+
+  /* ── Toast ── */
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#2c3e50;color:white;padding:10px 20px;border-radius:999px;font-size:13px;font-weight:700;z-index:9999;transition:transform .3s ease,opacity .3s ease;opacity:0;pointer-events:none;white-space:nowrap;}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+
+  /* ── Modal ── */
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:white;border-radius:24px;padding:28px 24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);}
+  .modal h2{font-size:18px;font-weight:900;margin-bottom:6px;}
+  .modal .sub{font-size:12px;color:var(--muted);margin-bottom:20px;}
+  .field-label{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;display:block;}
+  .field-input{width:100%;border:2px solid var(--border);border-radius:12px;padding:10px 14px;font-family:inherit;font-size:14px;color:var(--text);outline:none;transition:border-color .2s;margin-bottom:16px;}
+  .field-input:focus{border-color:var(--sky);}
+  .error-msg{font-size:12px;color:var(--pink);margin-top:-12px;margin-bottom:14px;}
+  .modal-footer{display:flex;gap:8px;justify-content:flex-end;}
+
+  /* ── Login ── */
+  #login-screen{max-width:400px;margin:0 auto;}
+  .login-header{text-align:center;margin-bottom:28px;}
+  .login-header h1{font-size:26px;font-weight:900;color:var(--sky);}
+  .login-header p{font-size:12px;color:var(--muted);margin-top:5px;}
+  .login-card{background:var(--card);border-radius:24px;box-shadow:0 4px 24px rgba(79,168,213,.12);padding:24px 20px;margin-bottom:14px;}
+  .login-card h2{font-size:15px;font-weight:900;margin-bottom:3px;}
+  .login-card .desc{font-size:12px;color:var(--muted);margin-bottom:18px;}
+  .login-divider{text-align:center;color:var(--muted);font-size:12px;margin:6px 0 14px;position:relative;}
+  .login-divider::before{content:'';position:absolute;top:50%;left:0;right:0;height:1px;background:var(--border);}
+  .login-divider span{background:var(--bg);padding:0 10px;position:relative;}
+  .name-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px;max-height:210px;overflow-y:auto;padding-right:2px;-webkit-overflow-scrolling:touch;}
+  .name-grid::-webkit-scrollbar{width:4px;}
+  .name-grid::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
+  .name-btn{padding:8px 6px;border-radius:10px;border:2px solid var(--border);background:white;font-family:inherit;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;transition:all .15s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .name-btn:hover{border-color:var(--sky);color:var(--sky);background:var(--sky-light);}
+  .name-btn.selected{border-color:var(--sky);background:var(--sky);color:white;}
+  .pin-input{width:100%;border:2px solid var(--border);border-radius:12px;padding:12px 14px;font-family:inherit;font-size:18px;font-weight:900;color:var(--text);outline:none;text-align:center;letter-spacing:6px;transition:border-color .2s;margin-bottom:12px;}
+  .pin-input:focus{border-color:var(--sky);}
+  .pin-input.error{border-color:var(--pink);}
+
+  /* ── Top Bar ── */
+  .top-bar{background:var(--card);border-radius:16px;box-shadow:0 2px 12px rgba(79,168,213,.10);padding:8px 12px;margin-bottom:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .top-bar-left{flex:1;min-width:0;}
+  .user-badge{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;}
+  .role{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:700;}
+  .role-admin{background:#fff3cd;color:#856404;}
+  .role-teacher{background:var(--sky-light);color:var(--sky);}
+  .save-status{font-size:11px;color:var(--muted);}
+  .save-status.saved{color:var(--green);}
+  #file-input{display:none;}
+
+  /* ── Teacher tabs (admin) ── */
+  .teacher-wrap{background:var(--card);border-radius:16px;box-shadow:0 2px 12px rgba(79,168,213,.10);margin-bottom:14px;overflow:hidden;}
+  .teacher-header{padding:10px 14px 8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .teacher-header-left{display:flex;align-items:center;gap:8px;flex:1;}
+  .teacher-org{font-size:13px;font-weight:900;color:var(--text);}
+  .teacher-count{font-size:11px;color:var(--muted);background:var(--bg);border-radius:999px;padding:2px 9px;}
+  .teacher-scroll{overflow-x:auto;padding:8px 12px 10px;}
+  .teacher-scroll::-webkit-scrollbar{height:3px;}
+  .teacher-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
+  .teacher-tabs{display:flex;gap:5px;width:max-content;}
+  .t-tab{padding:5px 13px;border-radius:999px;border:2px solid var(--border);background:white;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;transition:all .18s;white-space:nowrap;}
+  .t-tab.active{background:var(--sky);border-color:var(--sky);color:white;}
+  .t-tab.has-data{border-color:var(--green);color:var(--green);}
+  .t-tab.has-data.active{background:var(--green);border-color:var(--green);color:white;}
+
+  /* ── Month tabs ── */
+  .month-tabs-wrap{overflow-x:auto;margin-bottom:14px;}
+  .month-tabs-wrap::-webkit-scrollbar{height:3px;}
+  .month-tabs-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
+  .month-tabs{display:flex;gap:6px;width:max-content;padding:2px;}
+  .m-tab{padding:6px 15px;border-radius:999px;border:2px solid var(--border);background:white;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;transition:all .18s;white-space:nowrap;}
+  .m-tab.active{background:var(--sky);border-color:var(--sky);color:white;box-shadow:0 3px 10px rgba(79,168,213,.3);}
+  .m-tab.has-data{border-color:var(--green);color:var(--green);}
+  .m-tab.has-data.active{background:var(--green);border-color:var(--green);color:white;}
+
+  /* ── Main Card ── */
+  .main-card{background:var(--card);border-radius:20px;box-shadow:0 4px 20px rgba(79,168,213,.10);overflow:visible;margin-bottom:16px;}
+  .main-card-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 12px;border-bottom:2px solid var(--border);border-radius:20px 20px 0 0;}
+  .main-card-month{font-size:32px;font-weight:900;color:var(--text);line-height:1;}
+  .main-card-name{font-size:13px;font-weight:700;color:var(--sky);background:var(--sky-light);border-radius:999px;padding:4px 14px;}
+
+  /* ── Two column layout ── */
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--border);}
+  .col-left{padding:12px 10px;border-right:1px solid var(--border);min-width:0;overflow:visible;}
+  .col-right{padding:12px 10px;min-width:0;overflow:visible;}
+  .col-title{font-size:13px;font-weight:900;margin-bottom:8px;color:var(--text);}
+  /* 모바일: 세로 배치 */
+  @media(max-width:520px){
+    .two-col{grid-template-columns:1fr;}
+    .col-left{border-right:none;border-bottom:1px solid var(--border);}
+  }
+
+  /* ── Calendar ── */
+  .cal-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
+  .cal-wrap::-webkit-scrollbar{height:3px;}
+  .cal-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
+  .cal-table{width:100%;min-width:260px;border-collapse:collapse;font-size:11px;}
+  .cal-table th{text-align:center;padding:4px 2px;font-weight:700;font-size:11px;color:var(--muted);}
+  .cal-table th.sun{color:var(--red);}
+  .cal-table th.sat{color:var(--blue);}
+  .cal-table td{vertical-align:top;padding:1px;}
+  .day-cell{min-height:38px;border:1px dashed var(--border);border-radius:4px;padding:2px 3px;position:relative;cursor:pointer;transition:background .1s;}
+  .day-cell:hover{background:#f0f7ff;}
+  .day-cell.checked{background:#edfaf1;}
+  .day-cell.empty{border-color:transparent;cursor:default;}
+  .day-num{font-size:11px;font-weight:700;line-height:1;margin-bottom:2px;}
+  .day-num.sun{color:var(--red);}
+  .day-num.sat{color:var(--blue);}
+  .day-check{font-size:13px;font-weight:900;color:var(--green);line-height:1;text-align:center;margin-top:2px;}
+  .day-cell.checked-x .day-check{color:var(--pink);}
+
+  /* ── Bible reading legend ── */
+  .bible-hint{font-size:10px;color:var(--muted);margin-bottom:8px;}
+  .bible-hint span{font-weight:700;color:var(--green);}
+
+  /* ── Attendance table ── */
+  .att-table{width:100%;min-width:280px;border-collapse:collapse;font-size:11px;}
+  .att-table th{text-align:center;padding:5px 3px;font-weight:700;border-bottom:2px solid var(--sky);background:var(--sky-light);color:var(--sky);white-space:nowrap;font-size:10px;}
+  .att-table th.week-col{background:#f0f4f8;color:var(--muted);font-weight:500;}
+  .att-table td{text-align:center;padding:3px 2px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .att-table td.week-label{font-size:10px;color:var(--muted);font-weight:600;white-space:nowrap;}
+  .att-table tr.stat-row td{background:var(--sky-light);font-weight:700;font-size:10px;color:var(--sky);border-top:2px solid var(--sky);border-bottom:none;padding:6px 2px;}
+
+  .ox-sel{appearance:none;-webkit-appearance:none;border:1.5px solid var(--border);border-radius:6px;padding:2px 1px;font-family:inherit;font-size:11px;font-weight:700;width:38px;text-align:center;cursor:pointer;background:white;color:var(--muted);transition:all .12s;}
+  .ox-sel.val-o{border-color:var(--green);background:#edfaf1;color:var(--green);}
+  .ox-sel.val-x{border-color:var(--pink);background:#fdf0f3;color:var(--pink);}
+
+  /* ── Bulk bar ── */
+  .bulk-bar{display:flex;align-items:center;gap:5px;padding:7px 12px;border-top:1px solid var(--border);background:#fafcfe;flex-wrap:wrap;}
+  .bulk-label{font-size:10px;color:var(--muted);font-weight:700;white-space:nowrap;}
+  .bbtn{padding:3px 10px;border-radius:999px;border:1.5px solid;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;transition:all .12s;white-space:nowrap;}
+  .bbtn-o{border-color:var(--green);color:var(--green);background:#edfaf1;}
+  .bbtn-o:hover{background:var(--green);color:white;}
+  .bbtn-x{border-color:var(--pink);color:var(--pink);background:#fdf0f3;}
+  .bbtn-x:hover{background:var(--pink);color:white;}
+  .bbtn-r{border-color:var(--border);color:var(--muted);background:white;}
+  .bbtn-r:hover{border-color:var(--muted);}
+
+  /* ── Stats panel ── */
+  .stats-panel{background:var(--card);border-radius:20px;box-shadow:0 4px 20px rgba(79,168,213,.10);padding:18px;margin-bottom:16px;}
+  .panel-title{font-size:14px;font-weight:700;margin-bottom:4px;}
+  .panel-sub{font-size:11px;color:var(--muted);margin-bottom:14px;}
+  .cat-row{display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:12px;padding:10px 14px;margin-bottom:8px;}
+  .cat-name{font-size:12px;font-weight:700;width:80px;flex-shrink:0;}
+  .cat-bar-wrap{flex:1;height:7px;background:var(--border);border-radius:99px;overflow:hidden;}
+  .cat-bar{height:100%;border-radius:99px;transition:width .6s;}
+  .cat-pct{font-size:14px;font-weight:900;width:40px;text-align:right;flex-shrink:0;}
+  .cat-counts{font-size:10px;color:var(--muted);width:52px;text-align:right;flex-shrink:0;}
+  .monthly-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);}
+  .monthly-row:last-child{border-bottom:none;}
+  .month-badge{font-size:12px;font-weight:900;width:32px;text-align:center;flex-shrink:0;}
+  .monthly-bar-wrap{flex:1;height:8px;background:var(--border);border-radius:99px;overflow:hidden;}
+  .monthly-bar{height:100%;border-radius:99px;transition:width .6s;}
+  .monthly-right{display:flex;flex-direction:column;align-items:flex-end;width:56px;flex-shrink:0;}
+  .monthly-pct{font-size:12px;font-weight:700;line-height:1;}
+  .monthly-avg{font-size:10px;color:var(--muted);margin-top:2px;}
+  .divider{height:1px;background:var(--border);margin:16px 0;}
+
+  /* ── Teacher edit modal ── */
+  .teacher-list-edit{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;max-height:230px;overflow-y:auto;}
+  .teacher-edit-row{display:flex;align-items:center;gap:6px;background:var(--bg);border-radius:10px;padding:7px 10px;}
+  .teacher-edit-num{font-size:11px;color:var(--muted);width:20px;flex-shrink:0;text-align:right;}
+  .teacher-edit-name{flex:1;border:none;background:transparent;font-family:inherit;font-size:13px;font-weight:700;color:var(--text);outline:none;min-width:0;}
+  .teacher-edit-pin{width:66px;border:2px solid var(--border);border-radius:8px;padding:4px 6px;font-family:inherit;font-size:13px;font-weight:700;text-align:center;outline:none;letter-spacing:2px;}
+  .teacher-edit-pin:focus{border-color:var(--purple);}
+  .teacher-edit-del{background:none;border:none;color:var(--pink);font-size:16px;cursor:pointer;padding:0 2px;line-height:1;}
+  .add-teacher-row{display:flex;gap:7px;margin-bottom:18px;}
+  .add-teacher-input{flex:1;border:2px solid var(--border);border-radius:12px;padding:8px 12px;font-family:inherit;font-size:13px;color:var(--text);outline:none;}
+  .add-teacher-input:focus{border-color:var(--green);}
+
+  .scripture{text-align:center;font-size:11px;color:var(--muted);line-height:1.8;margin-top:8px;}
+
+  /* ── Cloud Sync ── */
+  .sync-status{font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:4px;}
+  .sync-status.syncing{color:var(--gold);}
+  .sync-status.synced{color:var(--green);}
+  .sync-status.error{color:var(--pink);}
+  .cloud-setup-box{background:#f0f7ff;border:2px solid var(--sky);border-radius:14px;padding:14px 16px;margin-bottom:16px;}
+  .cloud-setup-box h3{font-size:13px;font-weight:900;color:var(--sky);margin-bottom:4px;}
+  .cloud-setup-box p{font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6;}
+  .cloud-input-row{display:flex;gap:6px;align-items:center;}
+  .cloud-input{flex:1;border:2px solid var(--border);border-radius:10px;padding:7px 11px;font-family:inherit;font-size:12px;color:var(--text);outline:none;}
+  .cloud-input:focus{border-color:var(--sky);}
+  .cloud-divider{height:1px;background:var(--border);margin:14px 0 12px;}
+  .cloud-hint{font-size:11px;color:var(--muted);line-height:1.6;background:var(--bg);border-radius:8px;padding:8px 10px;margin-top:8px;}
+  .hidden{display:none!important;}
+
+  /* ── Lock (마감) ── */
+  .lock-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--pink);background:#fdf0f3;border:1.5px solid var(--pink);border-radius:999px;padding:2px 10px;margin-left:8px;}
+  .m-tab.locked{border-color:var(--pink)!important;color:var(--pink)!important;}
+  .m-tab.locked.active{background:var(--pink)!important;border-color:var(--pink)!important;color:white!important;}
+  .locked-overlay{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:36px 20px;text-align:center;}
+  .locked-overlay .lock-icon{font-size:40px;line-height:1;}
+  .locked-overlay .lock-msg{font-size:14px;font-weight:700;color:var(--pink);}
+  .locked-overlay .lock-sub{font-size:12px;color:var(--muted);}
+  .lock-row{display:flex;align-items:center;gap:8px;padding:7px 12px;background:#fff8f9;border-radius:12px;margin-bottom:8px;border:1.5px solid #f9d0d8;}
+  .lock-row-label{font-size:12px;font-weight:700;flex:1;}
+  .lock-toggle{position:relative;width:36px;height:20px;cursor:pointer;}
+  .lock-toggle input{opacity:0;width:0;height:0;position:absolute;}
+  .lock-slider{position:absolute;inset:0;background:var(--border);border-radius:999px;transition:background .2s;}
+  .lock-slider::before{content:'';position:absolute;left:3px;top:3px;width:14px;height:14px;background:white;border-radius:50%;transition:transform .2s;}
+  .lock-toggle input:checked + .lock-slider{background:var(--pink);}
+  .lock-toggle input:checked + .lock-slider::before{transform:translateX(16px);}
+  .lock-section-title{font-size:12px;font-weight:900;color:var(--muted);margin:12px 0 6px;}
+  .bible-summary{margin-top:10px;padding:8px 10px;background:var(--bg);border-radius:10px;}
+  .bible-sum-bar-wrap{height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:6px;}
+  .bible-sum-bar{height:100%;background:var(--green);border-radius:99px;transition:width .5s;}
+  .bible-sum-text{display:flex;align-items:center;justify-content:space-between;}
+  .bible-sum-label{font-size:11px;font-weight:700;color:var(--muted);}
+  .bible-sum-stat{font-size:12px;color:var(--text);}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- ══════ LOGIN ══════ -->
+<div id="login-screen">
+  <div class="login-header">
+    <h1>📋 교사 체크리스트</h1>
+    <p id="login-org-name">부서를 선택하세요</p>
+  </div>
+
+  <div class="login-card" id="dept-select-card">
+    <h2>🏫 부서 선택</h2>
+    <div class="desc">소속 부서를 선택하세요</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
+      <button class="btn btn-sky btn-lg btn-full" onclick="selectDept('junior')">🌱 유초등부</button>
+      <button class="btn btn-gold btn-lg btn-full" onclick="selectDept('senior')">✝️ 중고등부</button>
+    </div>
+  </div>
+
+  <div id="login-form-card" class="hidden">
+  <div class="login-card">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button class="btn btn-ghost btn-sm" onclick="backToDept()">← 뒤로</button>
+      <span id="dept-label" style="font-size:14px;font-weight:900;color:var(--sky)"></span>
+    </div>
+    <h2>👤 선생님 로그인</h2>
+    <div class="desc">본인의 이름을 선택하고 PIN을 입력하세요</div>
+    <label class="field-label">이름 선택</label>
+    <div class="name-grid" id="teacher-name-grid"></div>
+    <input type="hidden" id="teacher-select-login" value="" />
+    <label class="field-label">PIN (4자리)</label>
+    <input class="pin-input" id="teacher-pin-input" type="password" maxlength="4" placeholder="● ● ● ●"
+      onkeydown="if(event.key==='Enter') loginTeacher()" />
+    <div class="error-msg hidden" id="teacher-error">PIN이 올바르지 않습니다</div>
+    <button class="btn btn-sky btn-full btn-lg" style="margin-top:4px" onclick="loginTeacher()">입장하기</button>
+  </div>
+  </div><!-- login-form-card -->
+
+  <div class="login-divider"><span>관리자이신가요?</span></div>
+
+  <div class="login-card">
+    <h2>🔐 관리자 로그인</h2>
+    <div class="desc">전체 선생님 데이터를 조회하고 관리할 수 있습니다</div>
+    <label class="field-label">관리자 비밀번호</label>
+    <input class="pin-input" id="admin-pw-input" type="password" maxlength="20" placeholder="비밀번호 입력"
+      onkeydown="if(event.key==='Enter') loginAdmin()" />
+    <div class="error-msg hidden" id="admin-error">비밀번호가 올바르지 않습니다</div>
+    <button class="btn btn-gold btn-full btn-lg" style="margin-top:4px" onclick="loginAdmin()">관리자로 입장</button>
+  </div>
+</div>
+
+<!-- ══════ APP ══════ -->
+<div id="app-screen" class="hidden">
+
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <div class="user-badge">
+        <span id="top-user-name">-</span>
+        <span class="role" id="top-role-badge">-</span>
+      </div>
+      <div class="save-status" id="save-status">💾 자동저장</div>
+      <div class="sync-status hidden" id="sync-status">☁️ 동기화 중...</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="btn-file-save" onclick="exportData()">💾 저장</button>
+    <button class="btn btn-ghost btn-sm" id="btn-file-load" onclick="document.getElementById('file-input').click()">📂 불러오기</button>
+    <button class="btn btn-ghost btn-sm" id="btn-cloud" onclick="manualSync()" title="클라우드 수동 동기화">☁️ 동기화</button>
+    <button class="btn btn-ghost btn-sm" id="btn-settings" onclick="openSettingsModal()">⚙️ 관리</button>
+    <button class="btn btn-ghost btn-sm" id="btn-report" onclick="openReportModal()">📊 보고서</button>
+    <button class="btn btn-sky btn-sm" id="btn-cloud-save" onclick="cloudSave()">☁️ 저장</button>
+    <button class="btn btn-ghost btn-sm" id="btn-change-pin" onclick="openChangePinModal()">🔑 PIN 변경</button>
+    <button class="btn btn-pink btn-sm" onclick="logout()">로그아웃</button>
+    <input type="file" id="file-input" accept=".json" onchange="importData(event)" />
+  </div>
+
+  <div class="teacher-wrap hidden" id="teacher-selector-wrap">
+    <div class="teacher-header">
+      <div class="teacher-header-left">
+        <span class="teacher-org" id="org-name-display">교사 목록</span>
+        <span class="teacher-count" id="teacher-count-badge">0명</span>
+      </div>
+      <div style="display:flex;gap:5px">
+        <button class="btn btn-sky btn-sm" id="admin-dept-junior" onclick="adminSwitchDept('junior')">🌱 유초등부</button>
+        <button class="btn btn-ghost btn-sm" id="admin-dept-senior" onclick="adminSwitchDept('senior')">✝️ 중고등부</button>
+      </div>
+    </div>
+    <div class="teacher-scroll"><div class="teacher-tabs" id="teacher-tabs"></div></div>
+  </div>
+
+  <div class="month-tabs-wrap"><div class="month-tabs" id="month-tabs"></div></div>
+
+  <div class="main-card" id="main-card"></div>
+
+  <div class="stats-panel">
+    <div class="panel-title" id="stats-title">📊 항목별 체크 현황</div>
+    <div class="panel-sub">연간 전체 합산 기준</div>
+    <div id="cat-stats"></div>
+    <div class="divider"></div>
+    <div class="panel-title">📅 월별 체크 현황</div>
+    <div class="panel-sub">참석현황 기준 · O/전체 횟수</div>
+    <div id="monthly-stats"></div>
+
+  </div>
+
+  <div class="scripture">
+    그러므로 내 사랑하는 형제들아 견고하며 흔들리지 말며<br>
+    항상 주의 일에 더욱 힘쓰는 자들이 되라<br>
+    이는 너희 수고가 주 안에서 헛되지 않은 줄을 앎이니라 (고전 15장58절)
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ══════ PIN CHANGE MODAL ══════ -->
+<div class="modal-overlay" id="pin-modal">
+  <div class="modal">
+    <h2>🔑 PIN 변경</h2>
+    <div class="sub" id="pin-modal-sub">본인의 PIN을 변경합니다</div>
+    <label class="field-label">현재 PIN</label>
+    <input class="field-input" id="pin-current" type="password" maxlength="4" placeholder="현재 PIN" />
+    <div class="error-msg hidden" id="pin-current-error">현재 PIN이 올바르지 않습니다</div>
+    <label class="field-label">새 PIN</label>
+    <input class="field-input" id="pin-new" type="password" maxlength="4" placeholder="새 PIN (4자리)" />
+    <label class="field-label">새 PIN 확인</label>
+    <input class="field-input" id="pin-confirm" type="password" maxlength="4" placeholder="새 PIN 재입력" />
+    <div class="error-msg hidden" id="pin-confirm-error">새 PIN이 일치하지 않습니다</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeChangePinModal()">취소</button>
+      <button class="btn btn-sky" onclick="applyChangePin()">✅ 변경</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ SETTINGS MODAL ══════ -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <h2>⚙️ 선생님 관리</h2>
+    <div class="sub">조직명, 선생님 목록, PIN을 설정하세요</div>
+    <label class="field-label">조직명</label>
+    <input class="field-input" id="modal-org" type="text" placeholder="예: 주일학교 교사회" maxlength="30" />
+    <label class="field-label">관리자 비밀번호</label>
+    <input class="field-input" id="modal-admin-pw" type="password" placeholder="변경할 비밀번호 (그대로면 비워두세요)" maxlength="20" />
+
+    <!-- Supabase 클라우드 설정 -->
+    <div class="cloud-setup-box">
+      <h3>☁️ 클라우드 동기화 (Supabase)</h3>
+      <p>다른 기기에서도 같은 데이터를 공유하려면 Supabase 연동을 활성화하세요.<br>
+      API Key는 Netlify 환경변수에 설정되어 있어 별도 입력이 불필요합니다.</p>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <label style="font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px">
+          <input type="checkbox" id="modal-supabase-enabled" style="width:17px;height:17px;cursor:pointer" />
+          클라우드 동기화 활성화
+        </label>
+      </div>
+      <div class="cloud-hint">
+        💡 <b>최초 설정 방법 (관리자 1회)</b><br>
+        ① <a href="https://supabase.com" target="_blank" style="color:var(--sky)">supabase.com</a> 무료 가입 후 프로젝트 생성<br>
+        ② <b>Project Settings → API</b>에서 <b>Project URL</b>과 <b>anon public key</b> 복사<br>
+        ③ Netlify 사이트 설정 → <b>Environment variables</b>에서 아래 두 변수 등록:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<code style="background:#eee;padding:1px 4px;border-radius:4px">SUPABASE_URL</code> = <code style="background:#eee;padding:1px 4px;border-radius:4px">https://xxxx.supabase.co</code><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<code style="background:#eee;padding:1px 4px;border-radius:4px">SUPABASE_ANON_KEY</code> = <code style="background:#eee;padding:1px 4px;border-radius:4px">eyJh...</code><br>
+        ④ Supabase <b>SQL Editor</b>에서 아래 쿼리 실행:<br>
+        <code style="background:#eee;padding:4px 6px;border-radius:4px;display:block;margin-top:4px;font-size:10px;line-height:1.6">
+        CREATE TABLE checklist_data (<br>
+        &nbsp;&nbsp;id TEXT PRIMARY KEY,<br>
+        &nbsp;&nbsp;org_name TEXT,<br>
+        &nbsp;&nbsp;admin_pw TEXT,<br>
+        &nbsp;&nbsp;teachers JSONB,<br>
+        &nbsp;&nbsp;state JSONB,<br>
+        &nbsp;&nbsp;updated_at TIMESTAMPTZ DEFAULT now()<br>
+        );<br>
+        INSERT INTO checklist_data (id) VALUES ('junior'), ('senior')<br>
+        ON CONFLICT DO NOTHING;
+        </code><br>
+        ⑤ 위 체크박스 활성화 후 <b>✅ 저장</b>
+      </div>
+    </div>
+
+    <!-- 월 마감 관리 -->
+    <div style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <label class="field-label" style="margin-bottom:0">🔒 월별 마감 관리</label>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-ghost btn-sm" id="lock-dept-junior" onclick="lockModalSwitchDept('junior')">🌱 유초등부</button>
+          <button class="btn btn-ghost btn-sm" id="lock-dept-senior" onclick="lockModalSwitchDept('senior')">✝️ 중고등부</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">마감된 달은 교사가 수정할 수 없습니다. 관리자는 언제든지 해제 가능합니다.</div>
+      <div id="lock-month-list" style="max-height:200px;overflow-y:auto;padding-right:2px;"></div>
+    </div>
+
+    <label class="field-label">선생님 목록 <span id="modal-teacher-count" style="color:var(--sky)"></span>
+      <span style="color:var(--muted);font-weight:400;font-size:11px;margin-left:4px;">· PIN은 로그인에 사용됩니다</span>
+    </label>
+    <div class="teacher-list-edit" id="modal-teacher-list"></div>
+    <div class="add-teacher-row">
+      <input class="add-teacher-input" id="add-name-input" type="text" placeholder="이름" maxlength="20"
+        onkeydown="if(event.key==='Enter') document.getElementById('add-pin-input').focus()" />
+      <input class="add-teacher-input" id="add-pin-input" type="text" placeholder="PIN" maxlength="4"
+        style="width:74px;flex:none;text-align:center;letter-spacing:2px;"
+        onkeydown="if(event.key==='Enter') addTeacherFromModal()" />
+      <button class="btn btn-green btn-sm" onclick="addTeacherFromModal()">+ 추가</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSettingsModal()">취소</button>
+      <button class="btn btn-sky" onclick="applySettings()">✅ 저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════ CONSTANTS ══════ */
+const YEAR = 2026;
+const CATS = ['교회학교','주일말씀','수요말씀','구역모임','청년회교제'];
+const CAT_COLORS = ['#4fa8d5','#f5a623','#8b6fbf','#5bb974','#e8728a'];
+const MONTH_COLORS = ['#e67e22','#e8728a','#8b6fbf','#4fa8d5','#f5a623','#5bb974','#2980b9','#16a085','#8e44ad','#c0392b','#27ae60','#d35400'];
+const LS_KEY = 'checklist_2026_v4';
+const LS_CLOUD_KEY = 'checklist_cloud_cfg';
+const DAY_NAMES = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+function getWeeks(y, m) {
+  // 월요일 시작 기준 calendar.monthcalendar 방식
+  const firstDay = new Date(y, m-1, 1).getDay(); // 0=일
+  const lastDate = new Date(y, m, 0).getDate();
+  // 주차 수: Math.ceil((firstDay + lastDate) / 7)
+  const numWeeks = Math.ceil((firstDay + lastDate) / 7);
+  const w = [];
+  for (let n = 1; n <= numWeeks; n++) { w.push({label:`${n}주`}); }
+  return w;
+}
+
+const MONTHS = [];
+// 2025년 12월 추가
+const dec2025Last = new Date(2025, 12, 0).getDate();
+MONTHS.push({label:'25.12월', month: 12, year: 2025, last: dec2025Last, weeks: getWeeks(2025, 12)});
+for (let m = 1; m <= 12; m++) {
+  const last = new Date(YEAR, m, 0).getDate();
+  MONTHS.push({label:`${m}월`, month: m, year: YEAR, last, weeks: getWeeks(YEAR, m)});
+}
+
+// state[ti][mi] = { att: weeks×cats (O/X/''), bible: {day: 'O'|'X'|''} }
+function emptyMonthState(mo) {
+  return {
+    att: mo.weeks.map(() => CATS.map(() => '')),
+    bible: {}
+  };
+}
+// att 배열을 현재 월 주차 수에 맞게 보정
+function fixMonthState(ms, mo) {
+  if (!ms) return emptyMonthState(mo);
+  const numWeeks = mo.weeks.length;
+  const att = ms.att || [];
+  // 부족하면 채우기
+  while (att.length < numWeeks) att.push(CATS.map(() => ''));
+  // 각 행도 CATS 길이 맞추기
+  for (let w = 0; w < numWeeks; w++) {
+    if (!att[w]) att[w] = CATS.map(() => '');
+    while (att[w].length < CATS.length) att[w].push('');
+  }
+  return { att, bible: ms.bible || {} };
+}
+function emptyTeacherState() {
+  return MONTHS.map(mo => emptyMonthState(mo));
+}
+
+/* ══════ APP STATE ══════ */
+let orgName = '교사 체크리스트';
+let adminPw = '1234';
+const DEPTS = {
+  junior: { label: '🌱 유초등부', color: 'var(--sky)' },
+  senior: { label: '✝️ 중고등부', color: 'var(--gold)' }
+};
+let activeDept = 'senior'; // 기본값
+
+let teachersByDept = {
+  junior: [
+    {name:'이진우',pin:'0000'},{name:'이준원',pin:'0000'},{name:'조현화',pin:'0000'},
+    {name:'장세현',pin:'0000'},{name:'장세린',pin:'0000'},{name:'고준희',pin:'0000'},
+    {name:'이미경',pin:'0000'},{name:'유지윤',pin:'0000'},{name:'김민희',pin:'0000'},
+    {name:'김장성',pin:'0000'},{name:'이수빈',pin:'0000'},{name:'이채유',pin:'0000'},
+    {name:'강규빈',pin:'0000'},{name:'이건영',pin:'0000'},{name:'이희규',pin:'0000'},
+    {name:'김예빈',pin:'0000'},{name:'안은숙',pin:'0000'},{name:'서순혁',pin:'0000'},
+    {name:'나승민',pin:'0000'},{name:'김승원',pin:'0000'},{name:'김주현',pin:'0000'},
+    {name:'이은비',pin:'0000'},{name:'변나래',pin:'0000'},{name:'이성지',pin:'0000'},
+    {name:'이다은',pin:'0000'},{name:'이다정',pin:'0000'},{name:'이주환',pin:'0000'},
+    {name:'이희진',pin:'0000'},{name:'윤희동',pin:'0000'},{name:'지성진',pin:'0000'},
+    {name:'한지수',pin:'0000'},{name:'박태우',pin:'0000'},{name:'유경옥',pin:'0000'},
+    {name:'최준식',pin:'0000'}
+  ],
+  senior: [
+    {name:'강성훈',pin:'0000'},{name:'구진희',pin:'0000'},{name:'김나현',pin:'0000'},
+    {name:'김서지',pin:'0000'},{name:'김은혜',pin:'0000'},{name:'김하늘',pin:'0000'},
+    {name:'류정완',pin:'0000'},{name:'박건우',pin:'0000'},{name:'박소람',pin:'0000'},
+    {name:'변성준',pin:'0000'},{name:'서하은',pin:'0000'},{name:'양하영',pin:'0000'},
+    {name:'유호연',pin:'0000'},{name:'윤지훈',pin:'0000'},{name:'이건희',pin:'0000'},
+    {name:'이수아',pin:'0000'},{name:'이순규',pin:'0000'},{name:'이채연',pin:'0000'},
+    {name:'장선아',pin:'0000'},{name:'장선옥',pin:'0000'},{name:'정수영',pin:'0000'},
+    {name:'정유찬',pin:'0000'},{name:'정준영',pin:'0000'},{name:'조명근',pin:'0000'},
+    {name:'조성은',pin:'0000'},{name:'주신욱',pin:'0000'},{name:'최원우',pin:'0000'},
+    {name:'최은선',pin:'0000'},{name:'허형강',pin:'0000'}
+  ]
+};
+let stateByDept = {
+  junior: teachersByDept.junior.map(() => emptyTeacherState()),
+  senior: teachersByDept.senior.map(() => emptyTeacherState())
+};
+
+// 마감 상태: { junior: [mi, mi, ...], senior: [...] }  (잠긴 월의 인덱스 배열)
+let lockedMonths = { junior: [], senior: [] };
+let tsByDept = { junior: 0, senior: 0 };
+
+// 현재 활성 부서 데이터 참조 (기존 코드 호환)
+let teachers = teachersByDept[activeDept];
+let state = stateByDept[activeDept];
+
+let session = {role:null, teacherIdx:null};
+let activeTeacher = 0;
+let activeMonth = 0;
+let modalTeachers = [];
+
+/* ══════ SECURITY: PIN HASH ══════ */
+async function hashPin(pin) {
+  return pin; // 평문 저장
+}
+async function pinMatches(plain, stored) {
+  if (!stored) return false;
+  if (stored.length === 64) return false; // 구버전 해시 → 로그인 불가, 관리자가 PIN 재설정 필요
+  return plain === stored;
+}
+
+/* ══════ CLOUD CONFIG ══════ */
+let cloudCfg = {enabled: false};
+let syncDebounceTimer = null;
+let isSyncing = false;
+
+/* ══════ STORAGE ══════ */
+function saveToLocal() {
+  try {
+    // 반드시 현재 부서 참조를 전체 구조에 반영
+    teachersByDept[activeDept] = teachers;
+    stateByDept[activeDept] = state;
+    tsByDept[activeDept] = Date.now();
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      orgName, adminPw, teachersByDept, stateByDept, lockedMonths, tsByDept
+    }));
+    saveCloudCfg();
+    const now = new Date();
+    const ts = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    setStatus(`✅ 자동저장됨 (${ts})`, 'saved');
+    if (cloudCfg.enabled && session.role === 'admin') {
+      scheduleSyncToCloud();
+    }
+  } catch(e) { if(e && e.name==='QuotaExceededError') showToast('⚠️ 저장 공간이 부족합니다. 파일로 저장해주세요.'); }
+}
+function loadFromLocal() {
+  try {
+    const cfgRaw = localStorage.getItem(LS_CLOUD_KEY);
+    if (cfgRaw) { try { cloudCfg = JSON.parse(cfgRaw); } catch(e){} }
+
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return false;
+    const p = JSON.parse(raw);
+    if (!p) return false;
+    orgName = p.orgName || orgName;
+    adminPw = p.adminPw || adminPw;
+    if (p.lockedMonths) {
+      lockedMonths.junior = p.lockedMonths.junior || [];
+      lockedMonths.senior = p.lockedMonths.senior || [];
+    }
+    if (p.tsByDept) {
+      tsByDept.junior = p.tsByDept.junior || 0;
+      tsByDept.senior = p.tsByDept.senior || 0;
+    }
+
+    function parseStateArr(rawArr) {
+      return rawArr.map(ts => MONTHS.map((mo, mi) => {
+        const s = ts ? ts[mi] : null;
+        if (!s) return emptyMonthState(mo);
+        if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
+        return fixMonthState({att: s.att || [], bible: s.bible || {}}, mo);
+      }));
+    }
+
+    if (p.teachers && !p.teachersByDept) {
+      // 구버전(단일 teachers) 호환
+      teachersByDept.senior = p.teachers;
+      stateByDept.senior = parseStateArr(p.state || p.teachers.map(() => emptyTeacherState()));
+    } else if (p.teachersByDept) {
+      ['junior','senior'].forEach(dept => {
+        if (p.teachersByDept[dept]) teachersByDept[dept] = p.teachersByDept[dept];
+        if (p.stateByDept && p.stateByDept[dept]) {
+          stateByDept[dept] = parseStateArr(p.stateByDept[dept]);
+        }
+        while (stateByDept[dept].length < teachersByDept[dept].length) {
+          stateByDept[dept].push(emptyTeacherState());
+        }
+      });
+    }
+    teachers = teachersByDept[activeDept];
+    state = stateByDept[activeDept];
+    return true;
+  } catch(e) { console.error('loadFromLocal:', e); return false; }
+}
+function setStatus(msg, type='') {
+  const el = document.getElementById('save-status');
+  el.textContent = msg; el.className = 'save-status'+(type?' '+type:'');
+}
+function setSyncStatus(msg, type='') {
+  const el = document.getElementById('sync-status');
+  if (!cloudCfg.enabled) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.textContent = msg;
+  el.className = 'sync-status' + (type ? ' ' + type : '');
+}
+
+/* ══════ CLOUD SYNC (Supabase) ══════ */
+function saveCloudCfg() {
+  localStorage.setItem(LS_CLOUD_KEY, JSON.stringify(cloudCfg));
+}
+function scheduleSyncToCloud() {
+  clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = setTimeout(() => syncToCloud(), 500);
+}
+// dept 지정 시 해당 부서만, 없으면 양 부서 모두 업로드
+async function syncToCloud(targetDept = null) {
+  if (!cloudCfg.enabled) return;
+  if (isSyncing && !targetDept) { scheduleSyncToCloud(); return; }
+  if (!targetDept) isSyncing = true;
+
+  setSyncStatus('☁️ 저장 중...', 'syncing');
+  try {
+    // 현재 부서 참조를 전체 구조에 반영
+    teachersByDept[activeDept] = teachers;
+    stateByDept[activeDept] = state;
+
+    const depts = targetDept ? [targetDept] : ['junior', 'senior'];
+    for (const dept of depts) {
+      tsByDept[dept] = Date.now();
+      const payload = {
+        org_name: orgName,
+        admin_pw: adminPw,
+        teachers: teachersByDept[dept],
+        state: stateByDept[dept],
+        locked_months: lockedMonths,
+        _ts: tsByDept[dept]
+      };
+      const res = await fetch('/functions/supabase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dept, method: 'PUT', body: payload })
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `HTTP ${res.status}`);
+      }
+    }
+
+    const now = new Date();
+    const ts = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    setSyncStatus(`✅ 저장됨 (${ts})`, 'synced');
+  } catch(e) {
+    setSyncStatus('❌ 저장 실패: ' + e.message, 'error');
+    console.error('Cloud sync failed:', e);
+  } finally { if (!targetDept) isSyncing = false; }
+}
+async function syncFromCloud() {
+  if (!cloudCfg.enabled) return {ok: false, err: '클라우드 동기화가 비활성화 상태입니다'};
+  setSyncStatus('☁️ 불러오는 중...', 'syncing');
+  try {
+    const results = {};
+    for (const dept of ['junior', 'senior']) {
+      const res = await fetch('/functions/supabase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dept, method: 'GET' })
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `HTTP ${res.status}`);
+      }
+      results[dept] = await res.json();
+    }
+
+    const juniorData = results.junior;
+    const seniorData = results.senior;
+
+    // 양쪽 다 비어있으면 → 초기 상태, 로컬을 올림
+    if (!juniorData?.teachers?.length && !seniorData?.teachers?.length) {
+      setSyncStatus('☁️ 초기 업로드 중...', 'syncing');
+      await syncToCloud();
+      return {ok: true};
+    }
+
+    function parseStateArr(rawArr) {
+      return rawArr.map(ts2 => MONTHS.map((mo, mi) => {
+        const s = ts2 ? ts2[mi] : null;
+        if (!s) return emptyMonthState(mo);
+        if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
+        return fixMonthState({att: s.att || [], bible: s.bible || {}}, mo);
+      }));
+    }
+
+    // 부서별 독립 타임스탬프 비교
+    // → 로컬이 더 최신인 부서는 업로드, 클라우드가 더 최신인 부서는 다운로드
+    for (const dept of ['junior', 'senior']) {
+      const d = results[dept];
+      const localTs = tsByDept[dept] || 0;
+      const cloudTs = d?._ts || 0;
+
+      if (!d?.teachers?.length) {
+        // 클라우드에 해당 부서 데이터 없음 → 로컬 업로드
+        await syncToCloud(dept);
+        continue;
+      }
+
+      if (localTs > 0 && localTs > cloudTs) {
+        // 로컬이 더 최신 → 클라우드에 올림
+        await syncToCloud(dept);
+        continue;
+      }
+
+      // 클라우드가 더 최신 (또는 로컬 데이터 없음) → 다운로드 적용
+      // 공유 메타데이터는 더 최신 부서 데이터에서 가져옴
+      if (d.org_name) orgName = d.org_name;
+      if (d.admin_pw) adminPw = d.admin_pw;
+      if (d.locked_months) {
+        lockedMonths.junior = d.locked_months.junior || lockedMonths.junior;
+        lockedMonths.senior = d.locked_months.senior || lockedMonths.senior;
+      }
+      if (d.teachers?.length) teachersByDept[dept] = d.teachers;
+      if (d.state?.length) {
+        stateByDept[dept] = parseStateArr(d.state);
+        while (stateByDept[dept].length < teachersByDept[dept].length) {
+          stateByDept[dept].push(emptyTeacherState());
+        }
+      }
+      tsByDept[dept] = cloudTs;
+    }
+
+    teachers = teachersByDept[activeDept];
+    state = stateByDept[activeDept];
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      orgName, adminPw, teachersByDept, stateByDept, lockedMonths, tsByDept
+    }));
+
+    const now = new Date();
+    const ts = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    setSyncStatus(`✅ 동기화됨 (${ts})`, 'synced');
+    return {ok: true};
+  } catch(e) {
+    setSyncStatus('❌ 불러오기 실패', 'error');
+    console.error('Cloud load failed:', e);
+    return {ok: false, err: e.message};
+  }
+}
+async function cloudSave() {
+  if (!cloudCfg.enabled) {
+    showToast('⚠️ 클라우드 동기화가 설정되지 않았습니다. 관리자에게 문의하세요.'); return;
+  }
+  const btn = document.getElementById('btn-cloud-save');
+  btn.disabled = true;
+  btn.textContent = '저장 중...';
+  await syncToCloud();
+  btn.disabled = false;
+  btn.textContent = '☁️ 저장';
+  showToast('✅ 저장되었습니다!');
+}
+async function manualSync() {
+  if (!cloudCfg.enabled) {
+    showToast('⚠️ 클라우드 설정이 필요합니다. ⚙️ 관리 메뉴에서 활성화해주세요.'); return;
+  }
+  const result = await syncFromCloud();
+  if (result.ok) {
+    buildLoginTeacherSelect();
+    if (session.role) {
+      activeTeacher = Math.min(activeTeacher, teachers.length - 1);
+      activeMonth = Math.min(activeMonth, MONTHS.length - 1);
+    }
+    render();
+    showToast('✅ 최신 데이터를 불러왔습니다! 화면을 확인하세요.');
+  } else {
+    showToast('❌ 동기화 실패: ' + (result.err || '알 수 없는 오류'));
+  }
+}
+
+// 페이지를 닫거나 이탈하기 전 클라우드에 즉시 업로드
+window.addEventListener('beforeunload', () => {
+  if (!cloudCfg.enabled) return;
+  clearTimeout(syncDebounceTimer);
+  teachersByDept[activeDept] = teachers;
+  stateByDept[activeDept] = state;
+  ['junior', 'senior'].forEach(dept => {
+    tsByDept[dept] = tsByDept[dept] || Date.now();
+    const payload = {
+      org_name: orgName,
+      admin_pw: adminPw,
+      teachers: teachersByDept[dept],
+      state: stateByDept[dept],
+      locked_months: lockedMonths,
+      _ts: tsByDept[dept]
+    };
+    const body = JSON.stringify({ dept, method: 'PUT', body: payload });
+    navigator.sendBeacon('/functions/supabase', new Blob([body], {type: 'application/json'}));
+  });
+});
+/* ══════ EXPORT / IMPORT ══════ */
+function exportData() {
+  // 현재 부서 데이터를 전체 구조에 반영 후 백업
+  teachersByDept[activeDept] = teachers;
+  stateByDept[activeDept] = state;
+  const blob = new Blob([JSON.stringify({
+    version: 5, year: YEAR, orgName, adminPw,
+    teachersByDept, stateByDept, lockedMonths, tsByDept, cats: CATS
+  }, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  a.href = url;
+  a.download = `교사체크리스트_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.json`;
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('💾 저장되었습니다!');
+}
+function importData(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const p = JSON.parse(ev.target.result);
+      orgName = p.orgName || orgName;
+      adminPw = p.adminPw || adminPw;
+
+      function parseStateArr(rawArr) {
+        return rawArr.map(ts => MONTHS.map((mo, mi) => {
+          const s = ts ? ts[mi] : null;
+          if (!s) return emptyMonthState(mo);
+          if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
+          return fixMonthState({att: s.att || [], bible: s.bible || {}}, mo);
+        }));
+      }
+
+      if (p.teachersByDept) {
+        // v5: 양쪽 부서 포함
+        ['junior','senior'].forEach(dept => {
+          if (p.teachersByDept[dept]) teachersByDept[dept] = p.teachersByDept[dept];
+          if (p.stateByDept?.[dept]) {
+            stateByDept[dept] = parseStateArr(p.stateByDept[dept]);
+            while (stateByDept[dept].length < teachersByDept[dept].length)
+              stateByDept[dept].push(emptyTeacherState());
+          }
+        });
+        if (p.lockedMonths) lockedMonths = { junior: p.lockedMonths.junior||[], senior: p.lockedMonths.senior||[] };
+        if (p.tsByDept) { tsByDept.junior = p.tsByDept.junior||0; tsByDept.senior = p.tsByDept.senior||0; }
+      } else if (p.teachers && p.state) {
+        // v4 구버전: 단일 부서 → senior 복원
+        teachersByDept.senior = p.teachers;
+        stateByDept.senior = parseStateArr(p.state);
+        while (stateByDept.senior.length < teachersByDept.senior.length)
+          stateByDept.senior.push(emptyTeacherState());
+      } else {
+        showToast('⚠️ 올바른 파일이 아닙니다'); return;
+      }
+
+      teachers = teachersByDept[activeDept];
+      state = stateByDept[activeDept];
+      activeTeacher = 0; activeMonth = 0;
+      saveToLocal(); render(); showToast('✅ 불러왔습니다!');
+    } catch(err) { console.error(err); showToast('⚠️ 파일을 읽을 수 없습니다'); }
+  };
+  reader.readAsText(file); e.target.value = '';
+}
+
+/* ══════ TOAST ══════ */
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+/* ══════ LOGIN ══════ */
+function selectDept(dept) {
+  activeDept = dept;
+  teachers = teachersByDept[dept];
+  state = stateByDept[dept];
+  document.getElementById('dept-select-card').classList.add('hidden');
+  document.getElementById('login-form-card').classList.remove('hidden');
+  document.getElementById('dept-label').textContent = DEPTS[dept].label;
+  document.getElementById('dept-label').style.color = DEPTS[dept].color;
+  buildLoginTeacherSelect();
+}
+function backToDept() {
+  document.getElementById('login-form-card').classList.add('hidden');
+  document.getElementById('dept-select-card').classList.remove('hidden');
+  document.getElementById('teacher-pin-input').value = '';
+  document.getElementById('teacher-select-login').value = '';
+}
+function buildLoginTeacherSelect() {
+  const grid = document.getElementById('teacher-name-grid');
+  const hidden = document.getElementById('teacher-select-login');
+  grid.innerHTML = ''; hidden.value = '';
+  teachers.forEach((t, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'name-btn';
+    btn.textContent = t.name;
+    btn.dataset.i = i;
+    btn.onclick = () => {
+      grid.querySelectorAll('.name-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      hidden.value = i;
+      // 에러 메시지 숨기기
+      document.getElementById('teacher-error').classList.add('hidden');
+      document.getElementById('teacher-pin-input').classList.remove('error');
+      // PIN 입력창으로 포커스
+      document.getElementById('teacher-pin-input').focus();
+    };
+    grid.appendChild(btn);
+  });
+  document.getElementById('login-org-name').textContent = orgName;
+}
+async function loginAdmin() {
+  const pw = document.getElementById('admin-pw-input').value;
+  const err = document.getElementById('admin-error');
+  const match = await pinMatches(pw, adminPw);
+  if (!match) { err.classList.remove('hidden'); document.getElementById('admin-pw-input').classList.add('error'); return; }
+  err.classList.add('hidden');
+  document.getElementById('admin-pw-input').classList.remove('error');
+  session = {role:'admin', teacherIdx:null}; activeTeacher = 0; showApp();
+}
+async function loginTeacher() {
+  const sel = document.getElementById('teacher-select-login');
+  const pin = document.getElementById('teacher-pin-input').value.trim();
+  const err = document.getElementById('teacher-error');
+  const ti = sel.value;
+  if (ti === '') { showToast('이름을 선택해주세요'); return; }
+  const match = await pinMatches(pin, teachers[+ti].pin);
+  if (!match) { err.classList.remove('hidden'); document.getElementById('teacher-pin-input').classList.add('error'); return; }
+  err.classList.add('hidden');
+  session = {role:'teacher', teacherIdx:+ti}; activeTeacher = +ti; showApp();
+}
+function logout() {
+  session = {role:null, teacherIdx:null};
+  ['admin-pw-input','teacher-pin-input'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('error'); });
+  ['admin-error','teacher-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('app-screen').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  buildLoginTeacherSelect();
+}
+function showApp() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app-screen').classList.remove('hidden');
+  const isAdmin = session.role === 'admin';
+  document.getElementById('top-user-name').textContent = isAdmin ? '관리자' : teachers[session.teacherIdx].name+' 선생님';
+  document.getElementById('top-role-badge').textContent = isAdmin ? '관리자' : '선생님';
+  document.getElementById('top-role-badge').className = 'role '+(isAdmin?'role-admin':'role-teacher');
+  document.getElementById('teacher-selector-wrap').classList.toggle('hidden', !isAdmin);
+  if (isAdmin) {
+    // 관리자 부서 버튼 초기 상태
+    document.getElementById('admin-dept-junior').className = 'btn btn-sm ' + (activeDept==='junior' ? 'btn-sky' : 'btn-ghost');
+    document.getElementById('admin-dept-senior').className = 'btn btn-sm ' + (activeDept==='senior' ? 'btn-gold' : 'btn-ghost');
+  }
+  document.getElementById('btn-file-save').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btn-file-load').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btn-cloud').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btn-settings').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btn-change-pin').classList.toggle('hidden', isAdmin);
+  document.getElementById('btn-cloud-save').classList.toggle('hidden', isAdmin);
+  document.getElementById('btn-report').classList.toggle('hidden', !isAdmin);
+  render();
+}
+
+/* ══════ PIN CHANGE ══════ */
+function openChangePinModal() {
+  ['pin-current','pin-new','pin-confirm'].forEach(id => document.getElementById(id).value = '');
+  ['pin-current-error','pin-confirm-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('pin-modal-sub').textContent = teachers[session.teacherIdx].name+' 선생님의 PIN을 변경합니다';
+  document.getElementById('pin-modal').classList.add('open');
+}
+function closeChangePinModal() { document.getElementById('pin-modal').classList.remove('open'); }
+async function applyChangePin() {
+  const cur = document.getElementById('pin-current').value;
+  const nw = document.getElementById('pin-new').value.trim();
+  const cf = document.getElementById('pin-confirm').value.trim();
+  const ti = session.teacherIdx; let ok = true;
+  const curMatch = await pinMatches(cur, teachers[ti].pin);
+  if (!curMatch) { document.getElementById('pin-current-error').classList.remove('hidden'); ok = false; }
+  else document.getElementById('pin-current-error').classList.add('hidden');
+  if (!nw || nw !== cf) { document.getElementById('pin-confirm-error').classList.remove('hidden'); ok = false; }
+  else document.getElementById('pin-confirm-error').classList.add('hidden');
+  if (!ok) return;
+  teachers[ti].pin = await hashPin(nw);
+  saveToLocal(); closeChangePinModal(); showToast('✅ PIN이 변경되었습니다!');
+}
+
+/* ══════ SETTINGS MODAL ══════ */
+function openSettingsModal() {
+  modalTeachers = teachers.map(t => ({...t}));
+  document.getElementById('modal-org').value = orgName;
+  document.getElementById('modal-admin-pw').value = '';
+  // Supabase 활성화 상태 체크박스
+  document.getElementById('modal-supabase-enabled').checked = cloudCfg.enabled || false;
+  // 마감 관리 부서 버튼 초기화
+  lockModalActiveDept = activeDept;
+  updateLockDeptButtons();
+  renderLockMonthList();
+  renderModalList();
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettingsModal() {
+  document.getElementById('settings-modal').classList.remove('open');
+  document.getElementById('add-name-input').value = '';
+  document.getElementById('add-pin-input').value = '';
+}
+function renderModalList() {
+  const wrap = document.getElementById('modal-teacher-list');
+  wrap.innerHTML = '';
+  document.getElementById('modal-teacher-count').textContent = `(${modalTeachers.length}명)`;
+  modalTeachers.forEach((t, i) => {
+    // 해시된 PIN(64자)은 placeholder만 표시, 입력칸은 비워둠
+    const row = document.createElement('div'); row.className = 'teacher-edit-row';
+    row.innerHTML = `<span class="teacher-edit-num">${i+1}</span>
+      <input class="teacher-edit-name" value="${t.name}" data-i="${i}" maxlength="20" />
+      <input class="teacher-edit-pin" value="${t.pin && t.pin.length === 64 ? '' : (t.pin||'')}"
+        placeholder="${t.pin && t.pin.length === 64 ? '재설정필요' : 'PIN'}"
+        data-i="${i}" data-hashed="0" maxlength="4" />
+      <button class="teacher-edit-del" data-i="${i}">×</button>`;
+    wrap.appendChild(row);
+  });
+  wrap.querySelectorAll('.teacher-edit-name').forEach(inp =>
+    inp.addEventListener('input', e => { modalTeachers[+e.target.dataset.i].name = e.target.value; }));
+  wrap.querySelectorAll('.teacher-edit-pin').forEach(inp =>
+    inp.addEventListener('input', e => {
+      const idx = +e.target.dataset.i;
+      const val = e.target.value.trim();
+      // 입력하면 새 PIN(평문)으로 교체, 비워두면 기존 해시 유지
+      if (val) {
+        modalTeachers[idx].pin = val; // applySettings에서 해시 처리
+        e.target.dataset.hashed = '0';
+      } else {
+        // 빈칸 = 변경 안 함 → 원본 해시 복원
+        modalTeachers[idx].pin = teachers[idx]?.pin || modalTeachers[idx].pin;
+        e.target.dataset.hashed = '1';
+      }
+    }));
+  wrap.querySelectorAll('.teacher-edit-del').forEach(btn => btn.addEventListener('click', e => {
+    const idx = +e.currentTarget.dataset.i;
+    if (!confirm(`'${modalTeachers[idx].name}' 선생님을 삭제하시겠습니까?`)) return;
+    modalTeachers.splice(idx, 1); renderModalList();
+  }));
+}
+function addTeacherFromModal() {
+  const name = document.getElementById('add-name-input').value.trim();
+  const pin = document.getElementById('add-pin-input').value.trim();
+  if (!name) { showToast('⚠️ 이름을 입력해주세요'); return; }
+  if (!pin) { showToast('⚠️ PIN을 입력해주세요'); return; }
+  if (modalTeachers.find(t => t.name === name)) { showToast('⚠️ 이미 있는 이름입니다'); return; }
+  modalTeachers.push({name, pin});
+  document.getElementById('add-name-input').value = '';
+  document.getElementById('add-pin-input').value = '';
+  renderModalList();
+  setTimeout(() => { const w = document.getElementById('modal-teacher-list'); w.scrollTop = w.scrollHeight; }, 50);
+}
+async function applySettings() {
+  const newOrg = document.getElementById('modal-org').value.trim() || orgName;
+  const newPw = document.getElementById('modal-admin-pw').value.trim();
+  const newTeachers = await Promise.all(
+    modalTeachers
+      .map(t => ({name: t.name.trim(), pin: t.pin.trim()}))
+      .filter(t => t.name && t.pin)
+      .map(async t => ({
+        name: t.name,
+        pin: t.pin  // 평문 그대로 저장
+      }))
+  );
+  if (!newTeachers.length) { showToast('⚠️ 선생님을 1명 이상 입력해주세요'); return; }
+  const newState = newTeachers.map(t => {
+    const oldIdx = teachers.findIndex(ot => ot.name === t.name);
+    return oldIdx !== -1 ? state[oldIdx] : emptyTeacherState();
+  });
+  orgName = newOrg;
+  if (newPw) adminPw = newPw; // 평문 저장
+  teachers = newTeachers; state = newState;
+  teachersByDept[activeDept] = teachers;
+  stateByDept[activeDept] = state;
+  activeTeacher = Math.min(activeTeacher, teachers.length-1);
+
+  cloudCfg.enabled = document.getElementById('modal-supabase-enabled').checked;
+  saveCloudCfg();
+  setSyncStatus('', '');
+
+  closeSettingsModal(); saveToLocal(); render(); showToast('✅ 저장되었습니다!');
+}
+/* ══════ LOCK MONTH UI (settings modal) ══════ */
+let lockModalActiveDept = 'junior';
+function lockModalSwitchDept(dept) {
+  lockModalActiveDept = dept;
+  updateLockDeptButtons();
+  renderLockMonthList();
+}
+function updateLockDeptButtons() {
+  document.getElementById('lock-dept-junior').className = 'btn btn-sm ' + (lockModalActiveDept==='junior' ? 'btn-sky' : 'btn-ghost');
+  document.getElementById('lock-dept-senior').className = 'btn btn-sm ' + (lockModalActiveDept==='senior' ? 'btn-gold' : 'btn-ghost');
+}
+function renderLockMonthList() {
+  const dept = lockModalActiveDept;
+  const locked = lockedMonths[dept] || [];
+  const wrap = document.getElementById('lock-month-list');
+  wrap.innerHTML = '';
+
+  // 연도별로 묶기
+  const byYear = {};
+  MONTHS.forEach((mo, mi) => {
+    const y = mo.year || YEAR;
+    if (!byYear[y]) byYear[y] = [];
+    byYear[y].push({mo, mi});
+  });
+
+  Object.keys(byYear).sort().forEach(y => {
+    const yearLabel = document.createElement('div');
+    yearLabel.className = 'lock-section-title';
+    yearLabel.textContent = y + '년';
+    wrap.appendChild(yearLabel);
+
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:4px;';
+
+    byYear[y].forEach(({mo, mi}) => {
+      const isLocked = locked.includes(mi);
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm ' + (isLocked ? 'btn-pink' : 'btn-ghost');
+      btn.style.cssText = 'font-size:11px;padding:5px 4px;justify-content:center;';
+      btn.innerHTML = (isLocked ? '🔒 ' : '') + mo.label;
+      btn.onclick = () => {
+        if (!lockedMonths[dept]) lockedMonths[dept] = [];
+        const idx = lockedMonths[dept].indexOf(mi);
+        if (idx === -1) lockedMonths[dept].push(mi);
+        else lockedMonths[dept].splice(idx, 1);
+        saveToLocal();
+        renderLockMonthList();
+        render();
+        showToast(idx === -1 ? `🔒 ${mo.label} 마감` : `🔓 ${mo.label} 마감 해제`);
+      };
+      grid.appendChild(btn);
+    });
+    wrap.appendChild(grid);
+  });
+}
+
+/* ══════ HELPERS ══════ */
+function calcPct(arr) {
+  const v = arr.filter(x => x==='O'||x==='X');
+  return v.length ? Math.round(arr.filter(x=>x==='O').length/v.length*100) : null;
+}
+function countOX(arr) { return {o:arr.filter(x=>x==='O').length, total:arr.filter(x=>x==='O'||x==='X').length}; }
+function hasTeacherData(ti) {
+  return state[ti].some(ms => ms.att.some(wk=>wk.some(v=>v!=='')) || Object.keys(ms.bible).length > 0);
+}
+function hasMonthData(ti, mi) {
+  const ms = state[ti][mi];
+  return ms.att.some(wk=>wk.some(v=>v!=='')) || Object.keys(ms.bible).length > 0;
+}
+
+/* ══════ LOCK HELPERS ══════ */
+function isMonthLocked(mi) {
+  return (lockedMonths[activeDept] || []).includes(mi);
+}
+function toggleMonthLock(dept, mi) {
+  if (!lockedMonths[dept]) lockedMonths[dept] = [];
+  const idx = lockedMonths[dept].indexOf(mi);
+  if (idx === -1) lockedMonths[dept].push(mi);
+  else lockedMonths[dept].splice(idx, 1);
+  saveToLocal();
+  render();
+}
+
+/* ══════ TEACHER TABS ══════ */
+function buildTeacherTabs() {
+  document.getElementById('org-name-display').textContent = orgName;
+  document.getElementById('teacher-count-badge').textContent = teachers.length+'명';
+  const wrap = document.getElementById('teacher-tabs'); wrap.innerHTML = '';
+  teachers.forEach((t, ti) => {
+    const hasDat = hasTeacherData(ti), isActive = ti===activeTeacher;
+    const btn = document.createElement('button');
+    btn.className = 't-tab'+(isActive?' active':(hasDat?' has-data':''));
+    btn.textContent = t.name+(hasDat&&!isActive?' ✓':'');
+    btn.onclick = () => { activeTeacher = ti; render(); };
+    wrap.appendChild(btn);
+  });
+  setTimeout(() => { const a=wrap.querySelector('.t-tab.active'); if(a) a.scrollIntoView({inline:'center',behavior:'smooth'}); }, 50);
+}
+
+/* ══════ MONTH TABS ══════ */
+function buildMonthTabs() {
+  const wrap = document.getElementById('month-tabs'); wrap.innerHTML = '';
+  MONTHS.forEach((mo, mi) => {
+    const hasDat = hasMonthData(activeTeacher, mi), isActive = mi===activeMonth;
+    const locked = isMonthLocked(mi);
+    const btn = document.createElement('button');
+    let cls = 'm-tab';
+    if (isActive) cls += ' active';
+    else if (hasDat) cls += ' has-data';
+    if (locked) cls += ' locked';
+    btn.className = cls;
+    btn.textContent = mo.label + (locked ? ' 🔒' : (hasDat&&!isActive?' ✓':''));
+    btn.onclick = () => { activeMonth = mi; render(); };
+    wrap.appendChild(btn);
+  });
+  setTimeout(() => { const a=wrap.querySelector('.m-tab.active'); if(a) a.scrollIntoView({inline:'center',behavior:'smooth'}); }, 50);
+}
+
+/* ══════ CALENDAR (left col) ══════ */
+function buildCalendar(ti, mi) {
+  const mo = MONTHS[mi];
+  const ms = state[ti][mi];
+  const firstDay = new Date(mo.year || YEAR, mo.month-1, 1).getDay();
+  const lastDate = mo.last;
+
+  const wrap = document.createElement('div');
+
+  const hint = document.createElement('div');
+  hint.className = 'bible-hint';
+  hint.innerHTML = '날짜 클릭: <span>O</span> → <span style="color:var(--pink)">X</span> → 빈칸 순으로 토글';
+  wrap.appendChild(hint);
+
+  const table = document.createElement('table');
+  table.className = 'cal-table';
+
+  // Header
+  const thead = document.createElement('thead');
+  const hrow = document.createElement('tr');
+  DAY_NAMES.forEach((d, i) => {
+    const th = document.createElement('th');
+    th.textContent = d;
+    th.className = i===0?'sun':i===6?'sat':'';
+    hrow.appendChild(th);
+  });
+  thead.appendChild(hrow); table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (let row = 0; row < 7; row++) {
+    const rowStart = row*7 + 1 - firstDay;
+    if (rowStart > lastDate) break; // 이 행 전체가 범위 밖이면 중단
+    const tr = document.createElement('tr');
+    for (let col = 0; col < 7; col++) {
+      const td = document.createElement('td');
+      const actualDay = row*7 + col + 1 - firstDay;
+      if (actualDay < 1 || actualDay > lastDate) {
+        const empty = document.createElement('div');
+        empty.className = 'day-cell empty';
+        td.appendChild(empty); tr.appendChild(td); continue;
+      }
+      const d = actualDay;
+      const val = ms.bible[String(d)] || '';
+      const cell = document.createElement('div');
+      cell.className = 'day-cell'+(val==='O'?' checked':val==='X'?' checked-x':'');
+      cell.dataset.day = d;
+
+      const numDiv = document.createElement('div');
+      numDiv.className = 'day-num'+(col===0?' sun':col===6?' sat':'');
+      numDiv.textContent = d;
+
+      const checkDiv = document.createElement('div');
+      checkDiv.className = 'day-check';
+      checkDiv.textContent = val;
+
+      cell.appendChild(numDiv); cell.appendChild(checkDiv);
+      cell.addEventListener('click', () => {
+        if (isMonthLocked(mi)) { showToast('🔒 마감된 달은 수정할 수 없습니다'); return; }
+        const cur = ms.bible[String(d)] || '';
+        const next = cur===''?'O':cur==='O'?'X':'';
+        if (next==='') delete ms.bible[String(d)]; else ms.bible[String(d)] = next;
+        cell.className = 'day-cell'+(next==='O'?' checked':next==='X'?' checked-x':'');
+        checkDiv.textContent = next;
+        buildMonthTabs(); if(session.role==='admin') buildTeacherTabs();
+        updateStatsPanel();
+        // 달력 아래 요약 즉시 업데이트
+        const sumEl = document.getElementById(`bible-summary-${ti}-${mi}`);
+        if(sumEl) updateBibleSummary(sumEl, ms, mo);
+        saveToLocal();
+      });
+      td.appendChild(cell);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  const calWrap = document.createElement('div');
+  calWrap.className = 'cal-wrap';
+  calWrap.appendChild(table);
+  wrap.appendChild(calWrap);
+
+  // 달력 아래 성경읽기 요약
+  const bibleSum = document.createElement('div');
+  bibleSum.className = 'bible-summary';
+  bibleSum.id = `bible-summary-${ti}-${mi}`;
+  updateBibleSummary(bibleSum, ms, mo);
+  wrap.appendChild(bibleSum);
+
+  return wrap;
+}
+
+function updateBibleSummary(el, ms, mo) {
+  const read = Object.values(ms.bible).filter(v => v==='O').length;
+  const total = mo.last;
+  const pct = total > 0 ? Math.round(read/total*100) : 0;
+  el.innerHTML = `
+    <div class="bible-sum-bar-wrap"><div class="bible-sum-bar" style="width:${pct}%"></div></div>
+    <div class="bible-sum-text">
+      <span class="bible-sum-label">📖 성경읽기</span>
+      <span class="bible-sum-stat"><b style="color:var(--green)">${read}일</b> / ${total}일 &nbsp;<b style="color:var(--sky)">${pct}%</b></span>
+    </div>`;
+}
+
+/* ══════ ATTENDANCE TABLE (right col) ══════ */
+function buildAttTable(ti, mi) {
+  const mo = MONTHS[mi];
+  const ms = state[ti][mi];
+
+  const wrap = document.createElement('div');
+
+  // Bulk bar
+  const bulkBar = document.createElement('div');
+  bulkBar.className = 'bulk-bar';
+  bulkBar.innerHTML = `<span class="bulk-label">이번 달 전체</span>
+    <button class="bbtn bbtn-o" data-bulk="O">O 전체</button>
+    <button class="bbtn bbtn-x" data-bulk="X">X 전체</button>
+    <button class="bbtn bbtn-r" data-bulk="">초기화</button>`;
+  wrap.appendChild(bulkBar);
+
+  const tableWrap = document.createElement('div');
+  tableWrap.style.overflowX = 'auto';
+  tableWrap.style.webkitOverflowScrolling = 'touch';
+  const table = document.createElement('table');
+  table.className = 'att-table';
+
+  const thead = document.createElement('thead');
+  thead.innerHTML = `<tr><th class="week-col">주차</th>${CATS.map((c,ci)=>`<th style="color:${CAT_COLORS[ci]}">${c}</th>`).join('')}<th class="week-col">일괄</th></tr>`;
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+
+  mo.weeks.forEach((wk, wi) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="week-label">${wk.label}</td>`+
+      CATS.map((_,ci) => {
+        const val = ms.att[wi][ci];
+        const cls = val==='O'?' val-o':val==='X'?' val-x':'';
+        return `<td><select class="ox-sel${cls}" data-wi="${wi}" data-ci="${ci}">
+          <option value="">-</option>
+          <option value="O"${val==='O'?' selected':''}>O</option>
+          <option value="X"${val==='X'?' selected':''}>X</option>
+        </select></td>`;
+      }).join('')+
+      `<td style="white-space:nowrap;padding:3px 2px;">
+        <button class="bbtn bbtn-o" data-wi="${wi}" data-val="O" style="padding:2px 7px;font-size:10px;">O</button>
+        <button class="bbtn bbtn-x" data-wi="${wi}" data-val="X" style="padding:2px 7px;font-size:10px;">X</button>
+        <button class="bbtn bbtn-r" data-wi="${wi}" data-val="" style="padding:2px 7px;font-size:10px;">⟳</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  const statTr = document.createElement('tr');
+  statTr.className = 'stat-row';
+  statTr.innerHTML = `<td>출석률</td>`+
+    CATS.map((_,ci) => {
+      const pct = calcPct(mo.weeks.map((_,wi)=>ms.att[wi][ci]));
+      return `<td id="astat-${mi}-${ci}">${pct!==null?pct+'%':'-'}</td>`;
+    }).join('')+'<td></td>';
+  tbody.appendChild(statTr);
+  table.appendChild(tbody);
+  tableWrap.appendChild(table);
+  wrap.appendChild(tableWrap);
+
+  function refreshATT() {
+    tbody.querySelectorAll('.ox-sel').forEach(sel => {
+      const wi=+sel.dataset.wi, ci=+sel.dataset.ci, val=ms.att[wi][ci];
+      sel.value=val; sel.className='ox-sel'+(val==='O'?' val-o':val==='X'?' val-x':'');
+    });
+    CATS.forEach((_,ci) => {
+      const cell=document.getElementById(`astat-${mi}-${ci}`);
+      if(cell){const pct=calcPct(mo.weeks.map((_,wi)=>ms.att[wi][ci]));cell.textContent=pct!==null?pct+'%':'-';}
+    });
+  }
+  function bulkFillAtt(wi, val) {
+    if(wi===null) mo.weeks.forEach((_,w)=>CATS.forEach((__,c)=>{ms.att[w][c]=val;}));
+    else CATS.forEach((__,c)=>{ms.att[wi][c]=val;});
+  }
+  function afterBulk(msg) { refreshATT(); updateStatsPanel(); if(session.role==='admin') buildTeacherTabs(); buildMonthTabs(); saveToLocal(); showToast(msg); }
+
+  bulkBar.querySelector('[data-bulk="O"]').onclick=()=>{if(isMonthLocked(mi)){showToast('🔒 마감된 달은 수정할 수 없습니다');return;}bulkFillAtt(null,'O');afterBulk('✅ 이번 달 전체 O');};
+  bulkBar.querySelector('[data-bulk="X"]').onclick=()=>{if(isMonthLocked(mi)){showToast('🔒 마감된 달은 수정할 수 없습니다');return;}bulkFillAtt(null,'X');afterBulk('✅ 이번 달 전체 X');};
+  bulkBar.querySelector('[data-bulk=""]').onclick=()=>{if(isMonthLocked(mi)){showToast('🔒 마감된 달은 수정할 수 없습니다');return;}bulkFillAtt(null,'');afterBulk('🔄 초기화');};
+
+  wrap.addEventListener('click', e => {
+    const btn = e.target.closest('.bbtn[data-wi]'); if(!btn) return;
+    if(isMonthLocked(mi)){showToast('🔒 마감된 달은 수정할 수 없습니다');return;}
+    const wi2=+btn.dataset.wi, val=btn.dataset.val;
+    bulkFillAtt(wi2,val); afterBulk(`✅ ${wi2+1}주차 ${val||'초기화'}`);
+  });
+  wrap.addEventListener('change', e => {
+    const sel=e.target; if(!sel.classList.contains('ox-sel')) return;
+    if(isMonthLocked(mi)){
+      // 값 되돌리기
+      const wi2=+sel.dataset.wi, ci2=+sel.dataset.ci;
+      sel.value=ms.att[wi2][ci2];
+      sel.className='ox-sel'+(sel.value==='O'?' val-o':sel.value==='X'?' val-x':'');
+      showToast('🔒 마감된 달은 수정할 수 없습니다'); return;
+    }
+    const wi2=+sel.dataset.wi, ci2=+sel.dataset.ci;
+    ms.att[wi2][ci2]=sel.value;
+    sel.className='ox-sel'+(sel.value==='O'?' val-o':sel.value==='X'?' val-x':'');
+    CATS.forEach((_,ci)=>{const cell=document.getElementById(`astat-${mi}-${ci}`);if(cell){const pct=calcPct(mo.weeks.map((_,wi)=>ms.att[wi][ci]));cell.textContent=pct!==null?pct+'%':'-';}});
+    updateStatsPanel(); if(session.role==='admin') buildTeacherTabs(); buildMonthTabs(); saveToLocal();
+  });
+
+  return wrap;
+}
+
+/* ══════ MAIN CARD ══════ */
+function buildMainCard() {
+  const ti=activeTeacher, mi=activeMonth, mo=MONTHS[mi];
+  const card = document.createElement('div');
+  card.className = 'main-card';
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'main-card-header';
+  header.innerHTML = `<span class="main-card-month">${String(mo.month).padStart(2,'0')}</span>
+    <span class="main-card-name">👤 ${teachers[ti].name}</span>${isMonthLocked(mi) ? '<span class="lock-badge">🔒 마감</span>' : ''}`;
+  card.appendChild(header);
+
+  // 교사 화면에서 잠금된 달은 오버레이로 표시
+  if (isMonthLocked(mi) && session.role === 'teacher') {
+    const overlay = document.createElement('div');
+    overlay.className = 'locked-overlay';
+    overlay.innerHTML = `<div class="lock-icon">🔒</div>
+      <div class="lock-msg">${mo.label} 은(는) 마감되었습니다</div>
+      <div class="lock-sub">관리자가 해당 달을 마감하여 수정이 제한됩니다.<br>문의사항은 관리자에게 연락하세요.</div>`;
+    card.appendChild(overlay);
+    document.getElementById('main-card').innerHTML = '';
+    document.getElementById('main-card').appendChild(card);
+    return;
+  }
+
+  // Two columns
+  const twoCol = document.createElement('div');
+  twoCol.className = 'two-col';
+
+  const colLeft = document.createElement('div');
+  colLeft.className = 'col-left';
+  const titleL = document.createElement('div');
+  titleL.className = 'col-title';
+  titleL.textContent = '성경읽기';
+  colLeft.appendChild(titleL);
+  colLeft.appendChild(buildCalendar(ti, mi));
+
+  const colRight = document.createElement('div');
+  colRight.className = 'col-right';
+  const titleR = document.createElement('div');
+  titleR.className = 'col-title';
+  titleR.textContent = '참석현황';
+  colRight.appendChild(titleR);
+  colRight.appendChild(buildAttTable(ti, mi));
+
+  twoCol.appendChild(colLeft);
+  twoCol.appendChild(colRight);
+  card.appendChild(twoCol);
+
+  document.getElementById('main-card').innerHTML = '';
+  document.getElementById('main-card').appendChild(card);
+}
+
+/* ══════ STATS PANEL ══════ */
+function updateStatsPanel() {
+  const ti=activeTeacher;
+  if (!teachers[ti]) return;
+  document.getElementById('stats-title').textContent = `📊 ${teachers[ti].name} 선생님 항목별 체크 현황`;
+
+  const catWrap=document.getElementById('cat-stats'); catWrap.innerHTML='';
+  CATS.forEach((cat,ci) => {
+    const allVals=MONTHS.flatMap((mo,mi)=>mo.weeks.map((_,wi)=>state[ti][mi].att[wi][ci]));
+    const pct=calcPct(allVals), {o,total}=countOX(allVals), color=CAT_COLORS[ci];
+    const row=document.createElement('div'); row.className='cat-row';
+    row.innerHTML=`<div class="cat-name" style="color:${color};font-weight:700">${cat}</div>
+      <div class="cat-bar-wrap"><div class="cat-bar" style="width:${pct??0}%;background:${color}"></div></div>
+      <div class="cat-pct" style="color:${color}">${pct!==null?pct+'%':'-'}</div>
+      <div class="cat-counts">${total>0?`${o}/${total}회`:'미입력'}</div>`;
+    catWrap.appendChild(row);
+  });
+
+  const moWrap=document.getElementById('monthly-stats'); moWrap.innerHTML='';
+  MONTHS.forEach((mo,mi) => {
+    const allVals=mo.weeks.flatMap((_,wi)=>CATS.map((__,ci)=>state[ti][mi].att[wi][ci]));
+    const pct=calcPct(allVals), {o,total}=countOX(allVals), color=MONTH_COLORS[mi];
+    const row=document.createElement('div'); row.className='monthly-row';
+    row.innerHTML=`<div class="month-badge" style="color:${color}">${mo.label}</div>
+      <div class="monthly-bar-wrap"><div class="monthly-bar" style="width:${pct??0}%;background:${color}"></div></div>
+      <div class="monthly-right">
+        <div class="monthly-pct" style="color:${color}">${pct!==null?pct+'%':'-'}</div>
+        <div class="monthly-avg">${total>0?`${o}/${total}회`:'미입력'}</div>
+      </div>`;
+    moWrap.appendChild(row);
+  });
+
+}
+
+function adminSwitchDept(dept) {
+  if (dept === activeDept) return; // 동일 부서 재클릭 무시
+  // 현재 부서 데이터를 전체 구조에 반영한 뒤 전환
+  teachersByDept[activeDept] = teachers;
+  stateByDept[activeDept] = state;
+  activeDept = dept;
+  teachers = teachersByDept[dept];
+  state = stateByDept[dept];
+  activeTeacher = 0; activeMonth = 0;
+  document.getElementById('admin-dept-junior').className = 'btn btn-sm ' + (dept==='junior' ? 'btn-sky' : 'btn-ghost');
+  document.getElementById('admin-dept-senior').className = 'btn btn-sm ' + (dept==='senior' ? 'btn-gold' : 'btn-ghost');
+  render();
+}
+/* ══════ RENDER ══════ */
+function render() {
+  if (session.role==='admin') buildTeacherTabs();
+  buildMonthTabs(); buildMainCard(); updateStatsPanel();
+}
+
+/* ══════ INIT ══════ */
+// ?clear=1 로 접속하면 localStorage 초기화 후 클라우드에서 새로 불러옴
+if (new URLSearchParams(location.search).get('clear') === '1') {
+  localStorage.removeItem(LS_KEY);
+  history.replaceState(null, '', location.pathname);
+}
+loadFromLocal();
+
+buildLoginTeacherSelect();
+
+document.getElementById('app-screen').classList.add('hidden');
+document.getElementById('login-screen').classList.remove('hidden');
+
+// 클라우드 동기화: 활성화 여부와 관계없이 항상 최신 데이터 자동 로드
+// (새 기기에서도 cloudCfg.enabled가 false여도 서버에서 불러옴)
+(async function autoSyncOnLoad() {
+  setSyncStatus('☁️ 동기화 중...', 'syncing');
+  try {
+    const results = {};
+    for (const dept of ['junior', 'senior']) {
+      const res = await fetch('/functions/supabase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dept, method: 'GET' })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      results[dept] = await res.json();
+    }
+
+    function parseStateArr(rawArr) {
+      return rawArr.map(ts2 => MONTHS.map((mo, mi) => {
+        const s = ts2 ? ts2[mi] : null;
+        if (!s) return emptyMonthState(mo);
+        if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
+        return fixMonthState({att: s.att || [], bible: s.bible || {}}, mo);
+      }));
+    }
+
+    let updated = false;
+    for (const dept of ['junior', 'senior']) {
+      const d = results[dept];
+      if (!d?.teachers?.length) continue;
+      const localTs = tsByDept[dept] || 0;
+      const cloudTs = d._ts || 0;
+      if (cloudTs >= localTs) {
+        if (d.org_name) orgName = d.org_name;
+        if (d.admin_pw) adminPw = d.admin_pw;
+        if (d.locked_months) {
+          lockedMonths.junior = d.locked_months.junior || lockedMonths.junior;
+          lockedMonths.senior = d.locked_months.senior || lockedMonths.senior;
+        }
+        teachersByDept[dept] = d.teachers;
+        if (d.state?.length) {
+          stateByDept[dept] = parseStateArr(d.state);
+          while (stateByDept[dept].length < teachersByDept[dept].length)
+            stateByDept[dept].push(emptyTeacherState());
+        }
+        tsByDept[dept] = cloudTs;
+        updated = true;
+        // 클라우드 동기화 자동 활성화
+        cloudCfg.enabled = true;
+      }
+    }
+
+    if (updated) {
+      teachers = teachersByDept[activeDept];
+      state = stateByDept[activeDept];
+      localStorage.setItem(LS_KEY, JSON.stringify({orgName, adminPw, teachersByDept, stateByDept, lockedMonths, tsByDept}));
+      saveCloudCfg();
+      buildLoginTeacherSelect();
+    }
+    const now = new Date();
+    const ts = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    setSyncStatus(`✅ 동기화됨 (${ts})`, 'synced');
+  } catch(e) {
+    // 함수 없거나 오프라인이면 조용히 무시
+    if (cloudCfg.enabled) setSyncStatus('❌ 동기화 실패', 'error');
+    else document.getElementById('sync-status').classList.add('hidden');
+  }
+})();
+
+/* ══════ 보고서 ══════ */
+let rptDept = 'senior';
+
+function openReportModal() {
+  rptDept = activeDept;
+  // 월 선택 옵션 채우기
+  const fromSel = document.getElementById('rpt-from');
+  const toSel = document.getElementById('rpt-to');
+  fromSel.innerHTML = ''; toSel.innerHTML = '';
+  MONTHS.forEach((mo, mi) => {
+    fromSel.innerHTML += `<option value="${mi}">${mo.label}</option>`;
+    toSel.innerHTML += `<option value="${mi}">${mo.label}</option>`;
+  });
+  toSel.value = MONTHS.length - 1;
+  rptSetDept(rptDept);
+  document.getElementById('report-modal').classList.add('open');
+}
+function closeReportModal() {
+  document.getElementById('report-modal').classList.remove('open');
+}
+function rptSetDept(dept) {
+  rptDept = dept;
+  document.getElementById('rpt-dept-junior').className = 'btn btn-sm ' + (dept==='junior'?'btn-sky':'btn-ghost');
+  document.getElementById('rpt-dept-senior').className = 'btn btn-sm ' + (dept==='senior'?'btn-gold':'btn-ghost');
+}
+
+function exportExcel() {
+  const fromMi = +document.getElementById('rpt-from').value;
+  const toMi = +document.getElementById('rpt-to').value;
+  if (fromMi > toMi) { showToast('⚠️ 시작 월이 종료 월보다 클 수 없습니다'); return; }
+
+  const deptTeachers = teachersByDept[rptDept];
+  const deptState = stateByDept[rptDept];
+  const deptLabel = DEPTS[rptDept].label.replace(/[🌱✝️]/g,'').trim();
+  const selectedMonths = MONTHS.slice(fromMi, toMi + 1);
+  const fromLabel = MONTHS[fromMi].label;
+  const toLabel = MONTHS[toMi].label;
+  const ALL_CATS = [...CATS, '성경읽기'];
+
+  const wb = XLSX.utils.book_new();
+  const wsData = [];
+
+  // 헤더 1행: 월
+  const row1 = ['NO.', '이름'];
+  selectedMonths.forEach(mo => {
+    ALL_CATS.forEach((cat, ci) => row1.push(ci === 0 ? mo.label : ''));
+  });
+  ALL_CATS.forEach((cat, ci) => row1.push(ci === 0 ? '총계' : ''));
+  wsData.push(row1);
+
+  // 헤더 2행: 항목
+  const row2 = ['', ''];
+  selectedMonths.forEach(() => ALL_CATS.forEach(cat => row2.push(cat)));
+  ALL_CATS.forEach(cat => row2.push(cat));
+  wsData.push(row2);
+
+  // 데이터 행
+  deptTeachers.forEach((t, ti) => {
+    const tState = deptState[ti] || [];
+    const row = [ti + 1, t.name];
+    const totalVals = ALL_CATS.map(() => []);
+
+    selectedMonths.forEach(mo => {
+      const mi = MONTHS.indexOf(mo);
+      const ms = tState[mi] || emptyMonthState(mo);
+      ALL_CATS.forEach((cat, ci) => {
+        if (ci < CATS.length) {
+          const vals = mo.weeks.map((_, wi) => ms.att[wi] ? ms.att[wi][ci] || '' : '');
+          const o = vals.filter(v => v === 'O').length;
+          const x = vals.filter(v => v === 'X').length;
+          const total = o + x;
+          totalVals[ci].push(...vals);
+          row.push(total > 0 ? `${Math.round(o/total*100)}%` : '-');
+        } else {
+          const bibleVals = Object.values(ms.bible || {});
+          const bo = bibleVals.filter(v => v === 'O').length;
+          totalVals[ci].push(...bibleVals);
+          row.push(bo > 0 ? `${bo}/${mo.last}` : '-');
+        }
+      });
+    });
+
+    // 총계
+    ALL_CATS.forEach((cat, ci) => {
+      const vals = totalVals[ci];
+      if (ci < CATS.length) {
+        const o = vals.filter(v => v === 'O').length;
+        const x = vals.filter(v => v === 'X').length;
+        const total = o + x;
+        row.push(total > 0 ? `${Math.round(o/total*100)}%` : '-');
+      } else {
+        const bo = vals.filter(v => v === 'O').length;
+        const bt = vals.filter(v => v === 'O' || v === 'X').length;
+        row.push(bt > 0 ? `${bo}/${bt}` : '-');
+      }
+    });
+    wsData.push(row);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // 열 너비 설정
+  ws['!cols'] = [{ wch: 4 }, { wch: 8 }, ...Array(row1.length - 2).fill({ wch: 7 })];
+
+  // 월 헤더 병합
+  const merges = [];
+  let col = 2;
+  selectedMonths.forEach(mo => {
+    merges.push({ s: { r: 0, c: col }, e: { r: 0, c: col + ALL_CATS.length - 1 } });
+    col += ALL_CATS.length;
+  });
+  merges.push({ s: { r: 0, c: col }, e: { r: 0, c: col + ALL_CATS.length - 1 } });
+  ws['!merges'] = merges;
+
+  const titleText = `${YEAR} ${deptLabel} 교사 체크리스트 (${fromLabel}~${toLabel})`;
+  XLSX.utils.book_append_sheet(wb, ws, deptLabel);
+  XLSX.writeFile(wb, `${titleText}.xlsx`);
+  closeReportModal();
+  showToast('📥 엑셀 파일이 다운로드됩니다!');
+}
+
+
+function printReport() {
+  const fromMi = +document.getElementById('rpt-from').value;
+  const toMi = +document.getElementById('rpt-to').value;
+  if (fromMi > toMi) { showToast('⚠️ 시작 월이 종료 월보다 클 수 없습니다'); return; }
+
+  const deptTeachers = teachersByDept[rptDept];
+  const deptState = stateByDept[rptDept];
+  const deptLabel = DEPTS[rptDept].label;
+  const selectedMonths = MONTHS.slice(fromMi, toMi + 1);
+  const fromLabel = MONTHS[fromMi].label;
+  const toLabel = MONTHS[toMi].label;
+
+  // 성경읽기 카테고리 포함 전체 항목
+  const ALL_CATS = [...CATS, '성경읽기'];
+
+  // 테이블 헤더 생성
+  let thead = '<thead>';
+  // 1행: 월 헤더
+  thead += '<tr><th rowspan="2" style="width:20px">NO.</th><th rowspan="2">이름</th>';
+  selectedMonths.forEach(mo => {
+    thead += `<th colspan="${ALL_CATS.length}" class="month-header">${mo.label}</th>`;
+  });
+  thead += `<th colspan="${ALL_CATS.length}" class="total-header">총계</th>`;
+  thead += '</tr>';
+  // 2행: 항목 헤더
+  thead += '<tr>';
+  selectedMonths.forEach(() => {
+    ALL_CATS.forEach(cat => { thead += `<th>${cat}</th>`; });
+  });
+  ALL_CATS.forEach(cat => { thead += `<th>${cat}</th>`; });
+  thead += '</tr></thead>';
+
+  // 테이블 바디 생성
+  let tbody = '<tbody>';
+  deptTeachers.forEach((t, ti) => {
+    const tState = deptState[ti] || [];
+    tbody += `<tr><td class="rpt-no">${ti+1}</td><td style="font-weight:700;text-align:left;padding-left:6px">${t.name}</td>`;
+
+    // 총계용 누적
+    const totalVals = ALL_CATS.map(() => []);
+
+    selectedMonths.forEach((mo, mIdx) => {
+      const mi = MONTHS.indexOf(mo);
+      const ms = tState[mi] || emptyMonthState(mo);
+
+      ALL_CATS.forEach((cat, ci) => {
+        if (ci < CATS.length) {
+          // 참석 항목
+          const vals = mo.weeks.map((_, wi) => ms.att[wi] ? ms.att[wi][ci] || '' : '');
+          const o = vals.filter(v=>v==='O').length;
+          const x = vals.filter(v=>v==='X').length;
+          const total = o + x;
+          const pct = total > 0 ? Math.round(o/total*100) : null;
+          totalVals[ci].push(...vals);
+          if (pct !== null) {
+            tbody += `<td class="val-pct">${pct}%</td>`;
+          } else {
+            tbody += `<td style="color:#ccc">-</td>`;
+          }
+        } else {
+          // 성경읽기
+          const bibleVals = Object.values(ms.bible || {});
+          const bo = bibleVals.filter(v=>v==='O').length;
+          const btotal = mo.last;
+          const bpct = bo > 0 ? Math.round(bo/btotal*100) : null;
+          totalVals[ci].push(...bibleVals);
+          if (bpct !== null) {
+            tbody += `<td class="bible-cell">${bo}/${btotal}</td>`;
+          } else {
+            tbody += `<td style="color:#ccc">-</td>`;
+          }
+        }
+      });
+    });
+
+    // 총계 열
+    ALL_CATS.forEach((cat, ci) => {
+      const vals = totalVals[ci];
+      if (ci < CATS.length) {
+        const o = vals.filter(v=>v==='O').length;
+        const x = vals.filter(v=>v==='X').length;
+        const total = o + x;
+        const pct = total > 0 ? Math.round(o/total*100) : null;
+        tbody += pct !== null ? `<td class="val-pct" style="background:#fffbe6">${pct}%</td>` : `<td style="color:#ccc">-</td>`;
+      } else {
+        const bo = vals.filter(v=>v==='O').length;
+        const btotal = vals.filter(v=>v==='O'||v==='X').length;
+        tbody += btotal > 0 ? `<td class="bible-cell" style="background:#fffbe6">${bo}/${btotal}</td>` : `<td style="color:#ccc">-</td>`;
+      }
+    });
+
+    tbody += '</tr>';
+  });
+  tbody += '</tbody>';
+
+  const titleText = `${YEAR} ${deptLabel.replace(/[🌱✝️]/g,'').trim()} 교사 체크리스트 (${fromLabel}~${toLabel})`;
+  const html = `<div class="rpt-title">${titleText}</div><table class="rpt-table">${thead}${tbody}</table>`;
+
+  document.getElementById('report-print-area').innerHTML = html;
+  closeReportModal();
+  setTimeout(() => { window.print(); }, 200);
+}
+
+</script>
+
+<!-- ══════ 보고서 모달 ══════ -->
+<div class="modal-overlay" id="report-modal">
+  <div class="modal" style="max-width:560px">
+    <h2>📊 보고서 출력</h2>
+    <div class="sub">부서와 기간을 선택하고 PDF로 출력하세요</div>
+
+    <label class="field-label">부서 선택</label>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-sky btn-sm" id="rpt-dept-junior" onclick="rptSetDept('junior')">🌱 유초등부</button>
+      <button class="btn btn-ghost btn-sm" id="rpt-dept-senior" onclick="rptSetDept('senior')">✝️ 중고등부</button>
+    </div>
+
+    <label class="field-label">기간 선택</label>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <select id="rpt-from" class="field-input" style="flex:1;margin-bottom:0">
+      </select>
+      <span style="font-size:12px;color:var(--muted)">~</span>
+      <select id="rpt-to" class="field-input" style="flex:1;margin-bottom:0">
+      </select>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">* 선택한 기간의 월별 항목 통계가 표에 표시됩니다</div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeReportModal()">닫기</button>
+      <button class="btn btn-green" onclick="exportExcel()">📥 엑셀 다운로드</button>
+      <button class="btn btn-sky" onclick="printReport()">🖨️ PDF 출력</button>
+    </div>
+  </div>
+</div>
+
+<!-- 보고서 출력용 숨김 영역 -->
+<div id="report-print-area" style="display:none"></div>
+
+<!-- 모달 바깥 클릭 닫기 — report-modal HTML 파싱 후 실행 -->
+<script>
+document.getElementById('pin-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeChangePinModal(); });
+document.getElementById('settings-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeSettingsModal(); });
+document.getElementById('report-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeReportModal(); });
+</script>
+
+<style>
+@media print {
+  body > *:not(#report-print-area) { display: none !important; }
+  #report-print-area {
+    display: block !important;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 9px;
+    padding: 10mm;
+  }
+  .rpt-title { font-size: 14px; font-weight: 900; text-align: center; margin-bottom: 8px; }
+  .rpt-table { width: 100%; border-collapse: collapse; }
+  .rpt-table th, .rpt-table td { border: 1px solid #ccc; padding: 3px 4px; text-align: center; white-space: nowrap; }
+  .rpt-table thead th { background: #e8f4fb; font-weight: 900; font-size: 8px; }
+  .rpt-table th.month-header { background: #4fa8d5; color: white; font-size: 9px; }
+  .rpt-table th.total-header { background: #f5a623; color: white; font-size: 9px; }
+  .rpt-table td.val-o { color: #5bb974; font-weight: 700; }
+  .rpt-table td.val-x { color: #e8728a; }
+  .rpt-table td.val-pct { font-weight: 700; }
+  .rpt-table td.bible-cell { font-size: 8px; }
+  .rpt-table tr:nth-child(even) td { background: #fafafa; }
+  .rpt-table td.dark { background: #555; }
+  .rpt-no { color: #888; }
+  @page { size: A3 landscape; margin: 8mm; }
+}
+</style>
+
+</body>
+</html>
