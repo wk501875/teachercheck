@@ -1,6 +1,3 @@
-export async function onRequestGet(context) {
-  return onRequestPost(context);
-}
 const SUPABASE_URL = 'https://vmvalgkbdfyrdiayaxyz.supabase.co/rest/v1';
 const SUPABASE_KEY = 'sb_publishable_GkszbBMYO7SQYedNBw0-7Q_Jv90-DUH';
 
@@ -68,4 +65,7 @@ export async function onRequestOptions() {
       'Access-Control-Allow-Headers': 'Content-Type',
     },
   });
+}
+export async function onRequestGet(context) {
+  return onRequestPost(context);
 }
