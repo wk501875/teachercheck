@@ -96,6 +96,10 @@
   .t-tab.has-data{border-color:var(--green);color:var(--green);}
   .t-tab.has-data.active{background:var(--green);border-color:var(--green);color:white;}
 
+  /* ── Server save error ── */
+  .save-error{display:flex;align-items:center;gap:10px;background:#fdf0f3;border:2px solid var(--pink);color:var(--pink);border-radius:14px;padding:10px 14px;font-size:12px;font-weight:700;margin-bottom:14px;}
+  .save-error span{flex:1;line-height:1.6;}
+
   /* ── Season bar ── */
   .season-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
   .season-label{font-size:12px;font-weight:900;color:var(--muted);margin-right:2px;}
@@ -325,6 +329,11 @@
     <input type="file" id="file-input" accept=".json" onchange="importData(event)" />
   </div>
 
+  <div class="save-error hidden" id="save-error">
+    <span id="save-error-msg"></span>
+    <button class="btn btn-pink btn-sm" onclick="retryServerSave()">다시 시도</button>
+  </div>
+
   <div class="season-bar">
     <span class="season-label">📅 회기</span>
     <button class="t-tab" id="season-2026" onclick="switchSeason(2026)">2026 회기</button>
@@ -403,13 +412,10 @@
     <!-- Supabase 클라우드 설정 -->
     <div class="cloud-setup-box">
       <h3>☁️ 클라우드 동기화 (Supabase)</h3>
-      <p>다른 기기에서도 같은 데이터를 공유하려면 Supabase 연동을 활성화하세요.<br>
+      <p>모든 기기에서 같은 데이터를 공유합니다.<br>
       Supabase 연결 정보는 서버 함수(<code>functions/supabase.js</code>)에 들어 있어 별도 입력이 불필요합니다.</p>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-        <label style="font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px">
-          <input type="checkbox" id="modal-supabase-enabled" style="width:17px;height:17px;cursor:pointer" />
-          클라우드 동기화 활성화
-        </label>
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px">
+        ✅ 선생님 기록은 입력 후 몇 초 안에 선생님별로 서버에 자동 저장됩니다.
       </div>
       <div class="cloud-hint">
         💡 <b>최초 설정 방법 (관리자 1회)</b><br>
@@ -429,7 +435,7 @@
         INSERT INTO checklist_data (id) VALUES ('junior_2027'), ('senior_2027')<br>
         ON CONFLICT DO NOTHING;
         </code><br>
-        ⑤ 위 체크박스 활성화 후 <b>✅ 저장</b>
+        ⑤ 페이지를 새로고침하면 자동으로 서버와 연결됩니다
       </div>
     </div>
 
@@ -472,7 +478,6 @@ const CATS = ['교회학교','주일말씀','수요말씀','구역모임','청�
 const CAT_COLORS = ['#4fa8d5','#f5a623','#8b6fbf','#5bb974','#e8728a'];
 const MONTH_COLORS = ['#e67e22','#e8728a','#8b6fbf','#4fa8d5','#f5a623','#5bb974','#2980b9','#16a085','#8e44ad','#c0392b','#27ae60','#d35400','#b8860b'];
 const LS_KEY = 'checklist_2027_v1';
-const LS_CLOUD_KEY = 'checklist_cloud_cfg';
 const DAY_NAMES = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
 function getWeeks(y, m) {
@@ -574,13 +579,12 @@ let stateByDept = {
 
 // 마감 상태: { junior: [mi, mi, ...], senior: [...] }  (잠긴 월의 인덱스 배열)
 let lockedMonths = { junior: [], senior: [] };
-let tsByDept = { junior: 0, senior: 0 };
 
 // 현재 활성 부서 데이터 참조 (기존 코드 호환)
 let teachers = teachersByDept[activeDept];
 let state = stateByDept[activeDept];
 
-let session = {role:null, teacherIdx:null};
+let session = {role:null, teacherIdx:null, teacherId:null};
 let activeTeacher = 0;
 let activeMonth = 0;
 let modalTeachers = [];
@@ -596,36 +600,70 @@ async function pinMatches(plain, stored) {
 }
 
 /* ══════ CLOUD CONFIG ══════ */
-let cloudCfg = {enabled: false};
-let syncDebounceTimer = null;
-let isSyncing = false;
-let syncPending = false;
+// 서버 저장은 항상 켜져 있음 (예전 '클라우드 동기화 활성화' 체크박스는 제거)
 
 /* ══════ STORAGE ══════ */
-function saveToLocal() {
-  if (isPast()) return; // 2026 조회 중에는 브라우저 저장 안 함
+// 서버 저장 구조 (2027 회기)
+//  · 선생님 한 명의 기록 = teacher_records 한 행 (선생님 고유 ID로 구분)
+//  · 명단·PIN·마감 설정 = checklist_data의 2027 행
+// recMeta[dept][id] = { version, base }  base = 마지막으로 서버와 맞춘 기록 (동시 저장 시 병합 기준)
+let recMeta = { junior: {}, senior: {} };
+let rosterMeta = { junior: null, senior: null }; // { version, base }
+let pendingRecords = {};                         // 'dept|id' → true : 아직 서버에 안 올라간 기록
+let pendingRoster = { junior: false, senior: false };
+let serverLoaded = false;
+let saveTimer = null;
+let saveFailCount = 0;
+const SAVE_DELAY = 1500; // 입력 후 1.5초 뒤 자동 저장
+
+function newTeacherId() {
+  return 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+// 예전 명단(id 없음)은 순서대로 t_1, t_2 ... 부여 (서버 함수와 같은 규칙)
+function ensureIds(list) {
+  return (list || []).map((t, i) => (t && t.id ? t : {...t, id: `t_${i + 1}`}));
+}
+function legacyIndex(id) {
+  const m = /^t_(\d+)$/.exec(id);
+  return m ? +m[1] - 1 : -1;
+}
+function clone(v) { return JSON.parse(JSON.stringify(v)); }
+function parseTeacherState(ts) {
+  return CUR_MONTHS.map((mo, mi) => {
+    const s = ts ? ts[mi] : null;
+    if (!s) return emptyMonthState(mo);
+    if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
+    return fixMonthState({att: s.att || [], bible: s.bible || {}}, mo);
+  });
+}
+function hhmm() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+}
+
+function persistLocal() {
+  if (isPast()) return;
   try {
-    // 반드시 현재 부서 참조를 전체 구조에 반영
-    teachersByDept[activeDept] = teachers;
-    stateByDept[activeDept] = state;
-    tsByDept[activeDept] = Date.now();
     localStorage.setItem(LS_KEY, JSON.stringify({
-      orgName, adminPw, teachersByDept, stateByDept, lockedMonths, tsByDept
+      orgName, adminPw, teachersByDept, stateByDept, lockedMonths,
+      recMeta, rosterMeta, pendingRecords, pendingRoster
     }));
-    saveCloudCfg();
-    const now = new Date();
-    const ts = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    setStatus(`✅ 자동저장됨 (${ts})`, 'saved');
-    if (cloudCfg.enabled && session.role === 'admin') {
-      scheduleSyncToCloud();
-    }
   } catch(e) { if(e && e.name==='QuotaExceededError') showToast('⚠️ 저장 공간이 부족합니다. 파일로 저장해주세요.'); }
 }
+function saveToLocal() {
+  if (isPast()) return; // 2026 조회 중에는 브라우저 저장 안 함
+  // 반드시 현재 부서 참조를 전체 구조에 반영
+  teachersByDept[activeDept] = teachers;
+  stateByDept[activeDept] = state;
+  persistLocal();
+  setStatus(`📱 기기 저장됨 (${hhmm()})`, 'saved');
+  scheduleServerSave();
+}
+function markRecordDirty(dept, id) { if (id) pendingRecords[`${dept}|${id}`] = true; }
+function markRosterDirty(dept) { pendingRoster[dept] = true; }
+
 function loadFromLocal() {
   try {
-    const cfgRaw = localStorage.getItem(LS_CLOUD_KEY);
-    if (cfgRaw) { try { cloudCfg = JSON.parse(cfgRaw); } catch(e){} }
-
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return false;
     const p = JSON.parse(raw);
@@ -636,35 +674,24 @@ function loadFromLocal() {
       lockedMonths.junior = p.lockedMonths.junior || [];
       lockedMonths.senior = p.lockedMonths.senior || [];
     }
-    if (p.tsByDept) {
-      tsByDept.junior = p.tsByDept.junior || 0;
-      tsByDept.senior = p.tsByDept.senior || 0;
-    }
-
-    function parseStateArr(rawArr) {
-      return rawArr.map(ts => CUR_MONTHS.map((mo, mi) => {
-        const s = ts ? ts[mi] : null;
-        if (!s) return emptyMonthState(mo);
-        if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
-        return fixMonthState({att: s.att || [], bible: s.bible || {}}, mo);
-      }));
-    }
-
     if (p.teachers && !p.teachersByDept) {
       // 구버전(단일 teachers) 호환
       teachersByDept.senior = p.teachers;
-      stateByDept.senior = parseStateArr(p.state || p.teachers.map(() => emptyTeacherState()));
+      stateByDept.senior = (p.state || []).map(parseTeacherState);
     } else if (p.teachersByDept) {
       ['junior','senior'].forEach(dept => {
         if (p.teachersByDept[dept]) teachersByDept[dept] = p.teachersByDept[dept];
-        if (p.stateByDept && p.stateByDept[dept]) {
-          stateByDept[dept] = parseStateArr(p.stateByDept[dept]);
-        }
-        while (stateByDept[dept].length < teachersByDept[dept].length) {
-          stateByDept[dept].push(emptyTeacherState());
-        }
+        if (p.stateByDept && p.stateByDept[dept]) stateByDept[dept] = p.stateByDept[dept].map(parseTeacherState);
       });
     }
+    ['junior','senior'].forEach(dept => {
+      teachersByDept[dept] = ensureIds(teachersByDept[dept]);
+      while (stateByDept[dept].length < teachersByDept[dept].length) stateByDept[dept].push(emptyTeacherState());
+    });
+    if (p.recMeta) recMeta = { junior: p.recMeta.junior || {}, senior: p.recMeta.senior || {} };
+    if (p.rosterMeta) rosterMeta = { junior: p.rosterMeta.junior || null, senior: p.rosterMeta.senior || null };
+    if (p.pendingRecords) pendingRecords = p.pendingRecords;
+    if (p.pendingRoster) pendingRoster = { junior: !!p.pendingRoster.junior, senior: !!p.pendingRoster.senior };
     teachers = teachersByDept[activeDept];
     state = stateByDept[activeDept];
     return true;
@@ -676,210 +703,339 @@ function setStatus(msg, type='') {
 }
 function setSyncStatus(msg, type='') {
   const el = document.getElementById('sync-status');
-  if (!cloudCfg.enabled) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
   el.textContent = msg;
   el.className = 'sync-status' + (type ? ' ' + type : '');
 }
-
-/* ══════ CLOUD SYNC (Supabase) ══════ */
-function saveCloudCfg() {
-  localStorage.setItem(LS_CLOUD_KEY, JSON.stringify(cloudCfg));
+function showSaveError(msg) {
+  document.getElementById('save-error-msg').textContent = msg;
+  document.getElementById('save-error').classList.remove('hidden');
 }
-function scheduleSyncToCloud() {
-  clearTimeout(syncDebounceTimer);
-  syncPending = true;
-  syncDebounceTimer = setTimeout(() => syncToCloud(), 500);
+function hideSaveError() {
+  document.getElementById('save-error').classList.add('hidden');
 }
-// dept 지정 시 해당 부서만, 없으면 양 부서 모두 업로드
-async function syncToCloud(targetDept = null) {
-  if (!cloudCfg.enabled) return;
-  if (isPast()) return; // 2026 조회 중에는 자동 동기화 안 함 (2027로 돌아오면 다시 예약)
-  if (!targetDept) syncPending = false;
-  if (isSyncing && !targetDept) { scheduleSyncToCloud(); return; }
-  if (!targetDept) isSyncing = true;
 
+/* ══════ SERVER SAVE (선생님별 저장) ══════ */
+async function api(payload) {
+  try {
+    const res = await fetch('/supabase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: payload.method !== 'GET'
+    });
+    let data = null;
+    try { data = await res.json(); } catch(e) {}
+    return { ok: res.ok, status: res.status, data: data || {} };
+  } catch(e) {
+    return { ok: false, status: 0, data: { error: '인터넷 연결을 확인해주세요' } };
+  }
+}
+function apiError(r) {
+  const err = new Error((r.data && r.data.error) || `HTTP ${r.status}`);
+  err.code = r.data && r.data.code;
+  return err;
+}
+// 서버 작업은 한 번에 하나씩 순서대로
+let serverQueue = Promise.resolve();
+function enqueue(fn) {
+  const p = serverQueue.then(fn, fn);
+  serverQueue = p.catch(() => {});
+  return p;
+}
+
+// 같은 선생님 기록을 두 곳에서 동시에 고친 경우: 내가 바꾼 칸만 최신 기록 위에 반영
+function mergeTeacherState(base, local, server) {
+  return CUR_MONTHS.map((mo, mi) => {
+    const b = base[mi] || emptyMonthState(mo), l = local[mi] || emptyMonthState(mo), s = server[mi];
+    const att = s.att.map((row, wi) => row.map((v, ci) => {
+      const lv = (l.att[wi] && l.att[wi][ci]) || '', bv = (b.att[wi] && b.att[wi][ci]) || '';
+      return lv !== bv ? lv : v;
+    }));
+    const bible = {...s.bible};
+    new Set([...Object.keys(b.bible), ...Object.keys(l.bible)]).forEach(d => {
+      const lv = l.bible[d] || '', bv = b.bible[d] || '';
+      if (lv !== bv) { if (lv) bible[d] = lv; else delete bible[d]; }
+    });
+    return {att, bible};
+  });
+}
+// 화면이 참조 중인 객체를 그대로 두고 내용만 교체
+function applyStateInPlace(target, src) {
+  target.forEach((ms, mi) => { ms.att = src[mi].att; ms.bible = src[mi].bible; });
+}
+
+function rosterSnapshot(dept) {
+  return clone({ org_name: orgName, admin_pw: adminPw, teachers: teachersByDept[dept], locked: lockedMonths[dept] || [] });
+}
+function mergeRoster(base, local, server) {
+  const changed = (l, b) => JSON.stringify(l) !== JSON.stringify(b);
+  const bMap = {}, sMap = {};
+  base.teachers.forEach(t => { bMap[t.id] = t; });
+  server.teachers.forEach(t => { sMap[t.id] = t; });
+  const teachers = [];
+  local.teachers.forEach(lt => {
+    const bt = bMap[lt.id], st = sMap[lt.id];
+    if (!bt) { teachers.push(lt); return; }                 // 이 화면에서 새로 추가
+    if (!st) { if (changed(lt, bt)) teachers.push(lt); return; } // 다른 곳에서 삭제됨
+    teachers.push({ id: lt.id, name: lt.name !== bt.name ? lt.name : st.name, pin: lt.pin !== bt.pin ? lt.pin : st.pin });
+  });
+  server.teachers.forEach(st => { if (!bMap[st.id] && !teachers.some(t => t.id === st.id)) teachers.push(st); }); // 다른 곳에서 추가
+  return {
+    org_name: changed(local.org_name, base.org_name) ? local.org_name : server.org_name,
+    admin_pw: changed(local.admin_pw, base.admin_pw) ? local.admin_pw : server.admin_pw,
+    teachers,
+    locked: changed(local.locked, base.locked) ? local.locked : server.locked
+  };
+}
+function serverRosterSnapshot(d, dept) {
+  return {
+    org_name: d.org_name || '', admin_pw: d.admin_pw || '',
+    teachers: ensureIds(d.teachers || []).map(t => ({id: t.id, name: t.name, pin: t.pin})),
+    locked: (d.locked_months && d.locked_months[dept]) || []
+  };
+}
+// 명단 교체 시 기록을 ID 기준으로 다시 맞춤
+function setRoster(dept, newTeachers) {
+  const byId = {};
+  teachersByDept[dept].forEach((t, i) => { byId[t.id] = stateByDept[dept][i]; });
+  teachersByDept[dept] = newTeachers;
+  stateByDept[dept] = newTeachers.map(t => byId[t.id] || emptyTeacherState());
+}
+function refreshViewRefs() {
+  if (isPast()) return;
+  teachers = teachersByDept[activeDept];
+  state = stateByDept[activeDept];
+  if (session.role === 'teacher') {
+    const i = teachers.findIndex(t => t.id === session.teacherId);
+    if (i === -1) { logout(); showToast('⚠️ 명단이 바뀌어 다시 로그인해주세요'); return; }
+    session.teacherIdx = i; activeTeacher = i;
+  } else {
+    activeTeacher = Math.max(0, Math.min(activeTeacher, teachers.length - 1));
+  }
+}
+function refreshScreen() {
+  if (session.role && !isPast()) render();
+  else if (!session.role) buildLoginTeacherSelect();
+}
+
+async function saveRoster(dept) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const meta = rosterMeta[dept];
+    const sent = rosterSnapshot(dept);
+    const r = await api({ dept, method: 'SAVE_ROSTER', body: {
+      org_name: sent.org_name, admin_pw: sent.admin_pw, teachers: sent.teachers,
+      locked_months: {...clone(lockedMonths), [dept]: sent.locked},
+      roster_version: meta ? meta.version : null
+    }});
+    if (r.ok) {
+      rosterMeta[dept] = { version: r.data.roster_version, base: sent };
+      if (JSON.stringify(rosterSnapshot(dept)) === JSON.stringify(sent)) pendingRoster[dept] = false;
+      return;
+    }
+    if (r.status === 409 && r.data.conflict) {
+      // 다른 곳(다른 관리자 화면, 선생님 PIN 변경)에서 먼저 저장됨 → 내가 바꾼 부분만 반영해 다시 저장
+      const server = serverRosterSnapshot(r.data.roster, dept);
+      const merged = mergeRoster(meta ? meta.base : server, rosterSnapshot(dept), server);
+      orgName = merged.org_name || orgName;
+      adminPw = merged.admin_pw || adminPw;
+      lockedMonths[dept] = merged.locked;
+      setRoster(dept, merged.teachers);
+      rosterMeta[dept] = { version: r.data.roster.roster_version, base: server };
+      refreshViewRefs(); refreshScreen();
+      continue;
+    }
+    throw apiError(r);
+  }
+  throw new Error('다른 저장과 겹쳤습니다. 잠시 후 다시 시도합니다');
+}
+
+async function saveRecord(dept, id) {
+  const key = `${dept}|${id}`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const ti = teachersByDept[dept].findIndex(t => t.id === id);
+    if (ti === -1) { delete pendingRecords[key]; return; } // 명단에서 삭제된 선생님
+    const meta = recMeta[dept][id] || (recMeta[dept][id] = { version: 0, base: emptyTeacherState() });
+    const sent = clone(stateByDept[dept][ti]);
+    const r = await api({ dept, method: 'SAVE_RECORD', body: { teacher_id: id, state: sent, version: meta.version } });
+    if (r.ok) {
+      meta.version = r.data.version; meta.base = sent;
+      const cur = teachersByDept[dept].findIndex(t => t.id === id);
+      if (cur === -1 || JSON.stringify(stateByDept[dept][cur]) === JSON.stringify(sent)) delete pendingRecords[key];
+      return;
+    }
+    if (r.status === 409 && r.data.conflict) {
+      // 다른 곳에서 먼저 저장됨 → 최신 기록 위에 내가 바꾼 칸만 반영해 다시 저장
+      const rec = r.data.record;
+      const serverState = parseTeacherState(rec ? rec.state : null);
+      const cur = teachersByDept[dept].findIndex(t => t.id === id);
+      if (cur === -1) { delete pendingRecords[key]; return; }
+      const merged = mergeTeacherState(meta.base, stateByDept[dept][cur], serverState);
+      applyStateInPlace(stateByDept[dept][cur], merged);
+      recMeta[dept][id] = { version: rec ? rec.version : 0, base: serverState };
+      refreshScreen();
+      continue;
+    }
+    throw apiError(r);
+  }
+  throw new Error('다른 저장과 겹쳤습니다. 잠시 후 다시 시도합니다');
+}
+
+function hasPending() {
+  return Object.keys(pendingRecords).length > 0 || pendingRoster.junior || pendingRoster.senior;
+}
+function scheduleServerSave(delay = SAVE_DELAY) {
+  if (isPast() || !hasPending()) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushServerSaves, delay);
+  if (!saveFailCount) setSyncStatus('✏️ 저장 대기 중...', 'syncing');
+}
+function saveErrorMessage(e) {
+  if (e.code === 'records_table_missing')
+    return '⚠️ 서버에 선생님 기록 저장 공간이 아직 없어 저장되지 않았습니다. 관리자에게 알려주세요. (입력한 내용은 이 기기에 임시 보관 중)';
+  if (e.code === 'roster_row_missing')
+    return '⚠️ 서버에 2027 명단 행이 없어 저장되지 않았습니다. 관리자에게 알려주세요. (입력한 내용은 이 기기에 임시 보관 중)';
+  return `⚠️ 서버 저장 실패: ${e.message} (입력한 내용은 이 기기에 임시 보관 중)`;
+}
+async function doFlush() {
+  clearTimeout(saveTimer); saveTimer = null;
+  if (isPast() || !hasPending()) return true;
   setSyncStatus('☁️ 저장 중...', 'syncing');
   try {
-    // 현재 부서 참조를 전체 구조에 반영
-    teachersByDept[activeDept] = teachers;
-    stateByDept[activeDept] = state;
-
-    const depts = targetDept ? [targetDept] : ['junior', 'senior'];
-    for (const dept of depts) {
-      tsByDept[dept] = Date.now();
-      const payload = {
-        org_name: orgName,
-        admin_pw: adminPw,
-        teachers: teachersByDept[dept],
-        state: stateByDept[dept],
-        locked_months: lockedMonths,
-        _ts: tsByDept[dept]
-      };
-      const res = await fetch('/supabase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dept, method: 'PUT', body: payload })
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || `HTTP ${res.status}`);
-      }
+    if (!serverLoaded) await loadFromServer();
+    for (const dept of ['junior', 'senior']) if (pendingRoster[dept]) await saveRoster(dept);
+    for (const key of Object.keys(pendingRecords)) {
+      const [dept, id] = key.split('|');
+      await saveRecord(dept, id);
     }
-
-    const now = new Date();
-    const ts = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-    setSyncStatus(`✅ 저장됨 (${ts})`, 'synced');
+    saveFailCount = 0;
+    hideSaveError();
+    setSyncStatus(`✅ 서버에 저장됨 (${hhmm()})`, 'synced');
+    persistLocal();
+    if (hasPending()) scheduleServerSave(300); // 저장 중에 새로 입력한 내용
+    return true;
   } catch(e) {
-    setSyncStatus('❌ 저장 실패: ' + e.message, 'error');
-    console.error('Cloud sync failed:', e);
-  } finally { if (!targetDept) isSyncing = false; }
-}
-async function syncFromCloud() {
-  if (!cloudCfg.enabled) return {ok: false, err: '클라우드 동기화가 비활성화 상태입니다'};
-  if (isPast()) return {ok: false, err: PAST_MSG};
-  setSyncStatus('☁️ 불러오는 중...', 'syncing');
-  try {
-    const results = {};
-    for (const dept of ['junior', 'senior']) {
-      const res = await fetch('/supabase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dept, method: 'GET' })
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || `HTTP ${res.status}`);
-      }
-      results[dept] = await res.json();
-    }
-
-    const juniorData = results.junior;
-    const seniorData = results.senior;
-
-    // 양쪽 다 비어있으면 → 초기 상태, 로컬을 올림
-    if (!juniorData?.teachers?.length && !seniorData?.teachers?.length) {
-      setSyncStatus('☁️ 초기 업로드 중...', 'syncing');
-      await syncToCloud();
-      return {ok: true};
-    }
-
-    function parseStateArr(rawArr) {
-      return rawArr.map(ts2 => CUR_MONTHS.map((mo, mi) => {
-        const s = ts2 ? ts2[mi] : null;
-        if (!s) return emptyMonthState(mo);
-        if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
-        return fixMonthState({att: s.att || [], bible: s.bible || {}}, mo);
-      }));
-    }
-
-    // 부서별 독립 타임스탬프 비교
-    // → 로컬이 더 최신인 부서는 업로드, 클라우드가 더 최신인 부서는 다운로드
-    for (const dept of ['junior', 'senior']) {
-      const d = results[dept];
-      const localTs = tsByDept[dept] || 0;
-      const cloudTs = d?._ts || 0;
-
-      if (!d?.teachers?.length) {
-        // 클라우드에 해당 부서 데이터 없음 → 로컬 업로드
-        await syncToCloud(dept);
-        continue;
-      }
-
-      if (localTs > 0 && localTs > cloudTs) {
-        // 로컬이 더 최신 → 클라우드에 올림
-        await syncToCloud(dept);
-        continue;
-      }
-
-      // 클라우드가 더 최신 (또는 로컬 데이터 없음) → 다운로드 적용
-      // 공유 메타데이터는 더 최신 부서 데이터에서 가져옴
-      if (d.org_name) orgName = d.org_name;
-      if (d.admin_pw) adminPw = d.admin_pw;
-      if (d.locked_months) {
-        lockedMonths.junior = d.locked_months.junior || lockedMonths.junior;
-        lockedMonths.senior = d.locked_months.senior || lockedMonths.senior;
-      }
-      if (d.teachers?.length) teachersByDept[dept] = d.teachers;
-      if (d.state?.length) {
-        stateByDept[dept] = parseStateArr(d.state);
-        while (stateByDept[dept].length < teachersByDept[dept].length) {
-          stateByDept[dept].push(emptyTeacherState());
-        }
-      }
-      tsByDept[dept] = cloudTs;
-    }
-
-    if (!isPast()) {
-      teachers = teachersByDept[activeDept];
-      state = stateByDept[activeDept];
-    }
-    localStorage.setItem(LS_KEY, JSON.stringify({
-      orgName, adminPw, teachersByDept, stateByDept, lockedMonths, tsByDept
-    }));
-
-    const now = new Date();
-    const ts = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-    setSyncStatus(`✅ 동기화됨 (${ts})`, 'synced');
-    return {ok: true};
-  } catch(e) {
-    setSyncStatus('❌ 불러오기 실패', 'error');
-    console.error('Cloud load failed:', e);
-    return {ok: false, err: e.message};
+    console.error('Server save failed:', e);
+    persistLocal();
+    saveFailCount++;
+    const wait = Math.min(60, 5 * 2 ** (saveFailCount - 1));
+    showSaveError(saveErrorMessage(e) + ` — ${wait}초 후 자동으로 다시 시도합니다.`);
+    setSyncStatus(`❌ 저장 실패 (${wait}초 후 재시도)`, 'error');
+    if (saveFailCount === 1) showToast('❌ 서버 저장 실패 — 화면 위 안내를 확인하세요');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushServerSaves, wait * 1000);
+    return false;
   }
 }
+function flushServerSaves() { return enqueue(doFlush); }
+function retryServerSave() { saveFailCount = 0; flushServerSaves(); }
+
+// 서버에서 명단 + 선생님별 기록 불러오기 (아직 안 올라간 내 입력은 유지)
+async function loadFromServer() {
+  const results = {};
+  for (const dept of ['junior', 'senior']) {
+    const r = await api({ dept, method: 'GET' });
+    if (!r.ok) throw apiError(r);
+    results[dept] = r.data;
+  }
+  let latestVer = '';
+  let recordsMissing = false, rowMissing = false;
+  for (const dept of ['junior', 'senior']) {
+    const d = results[dept];
+    if (d.roster_row_missing) { rowMissing = true; continue; }
+    if (d.records_error) recordsMissing = true;
+    const server = serverRosterSnapshot(d, dept);
+
+    // 명단
+    if (!server.teachers.length) {
+      // 서버 명단이 비어 있음 → 이 기기의 명단을 처음으로 올림
+      rosterMeta[dept] = { version: d.roster_version, base: server };
+      pendingRoster[dept] = true;
+    } else if (pendingRoster[dept]) {
+      // 이 기기에서 바꾼 명단이 아직 안 올라감 → 유지 (저장할 때 병합)
+      if (!rosterMeta[dept]) rosterMeta[dept] = { version: d.roster_version, base: server };
+    } else {
+      setRoster(dept, server.teachers);
+      lockedMonths[dept] = server.locked;
+      rosterMeta[dept] = { version: d.roster_version, base: server };
+      if ((d.roster_version || '') >= latestVer) {
+        latestVer = d.roster_version || '';
+        if (d.org_name) orgName = d.org_name;
+        if (d.admin_pw) adminPw = d.admin_pw;
+      }
+    }
+
+    // 선생님별 기록
+    const recs = {};
+    (d.records || []).forEach(rec => { recs[rec.teacher_id] = rec; });
+    teachersByDept[dept].forEach((t, ti) => {
+      const key = `${dept}|${t.id}`;
+      const rec = recs[t.id];
+      if (rec) {
+        const st = parseTeacherState(rec.state);
+        if (pendingRecords[key]) {
+          // 아직 안 올라간 입력은 유지 (저장할 때 병합)
+          if (!recMeta[dept][t.id]) recMeta[dept][t.id] = { version: rec.version, base: st };
+        } else {
+          applyStateInPlace(stateByDept[dept][ti], st);
+          recMeta[dept][t.id] = { version: rec.version, base: clone(st) };
+        }
+      } else if (!pendingRecords[key]) {
+        // 새 구조에 아직 없는 기록 → 예전 부서 통째 저장분에서 가져와 표시
+        const li = legacyIndex(t.id);
+        const st = parseTeacherState(li >= 0 && d.legacy_state ? d.legacy_state[li] : null);
+        applyStateInPlace(stateByDept[dept][ti], st);
+        recMeta[dept][t.id] = { version: 0, base: clone(st) };
+      } else if (!recMeta[dept][t.id]) {
+        recMeta[dept][t.id] = { version: 0, base: emptyTeacherState() };
+      }
+    });
+  }
+  serverLoaded = true;
+  refreshViewRefs();
+  persistLocal();
+  if (recordsMissing) showSaveError(saveErrorMessage({ code: 'records_table_missing' }));
+  else if (rowMissing) showSaveError(saveErrorMessage({ code: 'roster_row_missing' }));
+  return results;
+}
+function reloadFromServer() { return enqueue(loadFromServer); }
+
 async function cloudSave() {
   if (isPast()) { showToast(PAST_MSG); return; }
-  if (!cloudCfg.enabled) {
-    showToast('⚠️ 클라우드 동기화가 설정되지 않았습니다. 관리자에게 문의하세요.'); return;
-  }
   const btn = document.getElementById('btn-cloud-save');
   btn.disabled = true;
   btn.textContent = '저장 중...';
-  await syncToCloud();
+  saveFailCount = 0;
+  const ok = await flushServerSaves();
   btn.disabled = false;
   btn.textContent = '☁️ 저장';
-  showToast('✅ 저장되었습니다!');
+  showToast(ok ? '✅ 서버에 저장되었습니다!' : '❌ 저장 실패 — 화면 위 안내를 확인하세요');
 }
 async function manualSync() {
   if (isPast()) { showToast(PAST_MSG); return; }
-  if (!cloudCfg.enabled) {
-    showToast('⚠️ 클라우드 설정이 필요합니다. ⚙️ 관리 메뉴에서 활성화해주세요.'); return;
-  }
-  const result = await syncFromCloud();
-  if (result.ok) {
-    buildLoginTeacherSelect();
-    if (session.role) {
-      activeTeacher = Math.min(activeTeacher, teachers.length - 1);
-      activeMonth = Math.min(activeMonth, MONTHS.length - 1);
-    }
-    render();
+  await flushServerSaves();
+  try {
+    setSyncStatus('☁️ 불러오는 중...', 'syncing');
+    await reloadFromServer();
+    activeMonth = Math.min(activeMonth, MONTHS.length - 1);
+    setSyncStatus(`✅ 동기화됨 (${hhmm()})`, 'synced');
+    refreshScreen();
     showToast('✅ 최신 데이터를 불러왔습니다! 화면을 확인하세요.');
-  } else {
-    showToast('❌ 동기화 실패: ' + (result.err || '알 수 없는 오류'));
+  } catch(e) {
+    setSyncStatus('❌ 불러오기 실패', 'error');
+    showToast('❌ 동기화 실패: ' + (e.message || '알 수 없는 오류'));
   }
 }
 
-// 페이지를 닫거나 이탈하기 전 클라우드에 즉시 업로드
-window.addEventListener('beforeunload', () => {
-  if (!cloudCfg.enabled) return;
-  if (isPast()) return; // 2026 조회 중에는 닫을 때 저장 안 함
-  clearTimeout(syncDebounceTimer);
-  teachersByDept[activeDept] = teachers;
-  stateByDept[activeDept] = state;
-  ['junior', 'senior'].forEach(dept => {
-    tsByDept[dept] = tsByDept[dept] || Date.now();
-    const payload = {
-      org_name: orgName,
-      admin_pw: adminPw,
-      teachers: teachersByDept[dept],
-      state: stateByDept[dept],
-      locked_months: lockedMonths,
-      _ts: tsByDept[dept]
-    };
-    const body = JSON.stringify({ dept, method: 'PUT', body: payload });
-    navigator.sendBeacon('/supabase', new Blob([body], {type: 'application/json'}));
-  });
+// 화면을 닫거나 다른 앱으로 넘어갈 때: 아직 안 올라간 내 기록만 저장 (부서 전체를 올리지 않음)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushServerSaves();
+});
+window.addEventListener('beforeunload', e => {
+  if (isPast() || !hasPending()) return;
+  flushServerSaves();
+  e.preventDefault();
+  e.returnValue = '';
 });
 /* ══════ EXPORT / IMPORT ══════ */
 function exportData() {
@@ -889,7 +1045,7 @@ function exportData() {
   stateByDept[activeDept] = state;
   const blob = new Blob([JSON.stringify({
     version: 5, year: YEAR, orgName, adminPw,
-    teachersByDept, stateByDept, lockedMonths, tsByDept, cats: CATS
+    teachersByDept, stateByDept, lockedMonths, cats: CATS
   }, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -933,7 +1089,6 @@ function importData(e) {
           }
         });
         if (p.lockedMonths) lockedMonths = { junior: p.lockedMonths.junior||[], senior: p.lockedMonths.senior||[] };
-        if (p.tsByDept) { tsByDept.junior = p.tsByDept.junior||0; tsByDept.senior = p.tsByDept.senior||0; }
       } else if (p.teachers && p.state) {
         // v4 구버전: 단일 부서 → senior 복원
         teachersByDept.senior = p.teachers;
@@ -944,6 +1099,12 @@ function importData(e) {
         showToast('⚠️ 올바른 파일이 아닙니다'); return;
       }
 
+      // 불러온 명단·기록을 선생님별로 서버에 다시 저장
+      ['junior','senior'].forEach(dept => {
+        teachersByDept[dept] = ensureIds(teachersByDept[dept]);
+        markRosterDirty(dept);
+        teachersByDept[dept].forEach(t => markRecordDirty(dept, t.id));
+      });
       teachers = teachersByDept[activeDept];
       state = stateByDept[activeDept];
       activeTeacher = 0; activeMonth = 0;
@@ -1009,7 +1170,7 @@ async function loginAdmin() {
   if (!match) { err.classList.remove('hidden'); document.getElementById('admin-pw-input').classList.add('error'); return; }
   err.classList.add('hidden');
   document.getElementById('admin-pw-input').classList.remove('error');
-  session = {role:'admin', teacherIdx:null}; activeTeacher = 0; showApp();
+  session = {role:'admin', teacherIdx:null, teacherId:null}; activeTeacher = 0; showApp();
 }
 async function loginTeacher() {
   const sel = document.getElementById('teacher-select-login');
@@ -1020,11 +1181,11 @@ async function loginTeacher() {
   const match = await pinMatches(pin, teachers[+ti].pin);
   if (!match) { err.classList.remove('hidden'); document.getElementById('teacher-pin-input').classList.add('error'); return; }
   err.classList.add('hidden');
-  session = {role:'teacher', teacherIdx:+ti}; activeTeacher = +ti; showApp();
+  session = {role:'teacher', teacherIdx:+ti, teacherId:teachers[+ti].id}; activeTeacher = +ti; showApp();
 }
 function logout() {
   if (isPast()) enterCurrentSeason();
-  session = {role:null, teacherIdx:null};
+  session = {role:null, teacherIdx:null, teacherId:null};
   ['admin-pw-input','teacher-pin-input'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('error'); });
   ['admin-error','teacher-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
   document.getElementById('app-screen').classList.add('hidden');
@@ -1108,7 +1269,7 @@ function enterCurrentSeason() {
   activeTeacher = session.role === 'teacher' ? session.teacherIdx : 0;
   activeMonth = 0;
   applySeasonUI();
-  if (syncPending && cloudCfg.enabled && session.role === 'admin') scheduleSyncToCloud();
+  if (hasPending()) scheduleServerSave();
 }
 
 async function switchSeason(y) {
@@ -1121,7 +1282,7 @@ async function switchSeason(y) {
       // 2027 편집 내용을 먼저 반영하고, 대기 중인 동기화는 전환 전에 마무리
       teachersByDept[activeDept] = teachers;
       stateByDept[activeDept] = state;
-      if (syncPending) { clearTimeout(syncDebounceTimer); await syncToCloud(); }
+      await flushServerSaves(); // 대기 중인 2027 저장을 먼저 마무리
       viewYear = PAST_YEAR; MONTHS = PAST_MONTHS;
       setPastView(activeDept);
       activeMonth = 0;
@@ -1164,18 +1325,22 @@ async function applyChangePin() {
   if (!nw || nw !== cf) { document.getElementById('pin-confirm-error').classList.remove('hidden'); ok = false; }
   else document.getElementById('pin-confirm-error').classList.add('hidden');
   if (!ok) return;
+  const r = await api({ dept: activeDept, method: 'SET_PIN', body: { teacher_id: session.teacherId, old_pin: cur, new_pin: nw } });
+  if (!r.ok) {
+    if (r.data.code === 'wrong_pin') { document.getElementById('pin-current-error').classList.remove('hidden'); return; }
+    showToast('❌ PIN 변경 실패: ' + (r.data.error || `HTTP ${r.status}`)); return;
+  }
   teachers[ti].pin = await hashPin(nw);
-  saveToLocal(); closeChangePinModal(); showToast('✅ PIN이 변경되었습니다!');
+  persistLocal(); closeChangePinModal(); showToast('✅ PIN이 변경되었습니다!');
 }
 
 /* ══════ SETTINGS MODAL ══════ */
 function openSettingsModal() {
   if (isPast()) { showToast(PAST_MSG); return; }
   modalTeachers = teachers.map(t => ({...t}));
+  modalDrafts = {};
   document.getElementById('modal-org').value = orgName;
   document.getElementById('modal-admin-pw').value = '';
-  // Supabase 활성화 상태 체크박스
-  document.getElementById('modal-supabase-enabled').checked = cloudCfg.enabled || false;
   // 마감 관리 부서 버튼 초기화
   lockModalActiveDept = activeDept;
   updateLockDeptButtons();
@@ -1215,7 +1380,8 @@ function renderModalList() {
         e.target.dataset.hashed = '0';
       } else {
         // 빈칸 = 변경 안 함 → 원본 해시 복원
-        modalTeachers[idx].pin = teachers[idx]?.pin || modalTeachers[idx].pin;
+        const orig = teachersByDept[lockModalActiveDept].find(t => t.id === modalTeachers[idx].id);
+        modalTeachers[idx].pin = orig?.pin || modalTeachers[idx].pin;
         e.target.dataset.hashed = '1';
       }
     }));
@@ -1231,7 +1397,7 @@ function addTeacherFromModal() {
   if (!name) { showToast('⚠️ 이름을 입력해주세요'); return; }
   if (!pin) { showToast('⚠️ PIN을 입력해주세요'); return; }
   if (modalTeachers.find(t => t.name === name)) { showToast('⚠️ 이미 있는 이름입니다'); return; }
-  modalTeachers.push({name, pin});
+  modalTeachers.push({id: newTeacherId(), name, pin});
   document.getElementById('add-name-input').value = '';
   document.getElementById('add-pin-input').value = '';
   renderModalList();
@@ -1241,47 +1407,37 @@ async function applySettings() {
   if (isPast()) { closeSettingsModal(); showToast(PAST_MSG); return; }
   const newOrg = document.getElementById('modal-org').value.trim() || orgName;
   const newPw = document.getElementById('modal-admin-pw').value.trim();
-  const newTeachers = await Promise.all(
-    modalTeachers
-      .map(t => ({name: t.name.trim(), pin: t.pin.trim()}))
-      .filter(t => t.name && t.pin)
-      .map(async t => ({
-        name: t.name,
-        pin: t.pin  // 평문 그대로 저장
-      }))
-  );
-  if (!newTeachers.length) { showToast('⚠️ 선생님을 1명 이상 입력해주세요'); return; }
-  // 저장은 "지금 모달에서 편집 중인 부서" 기준으로 처리 (탭 전환 후에도 정확히 반영되도록)
-  const dept = lockModalActiveDept;
-  const prevTeachers = teachersByDept[dept] || [];
-  const prevState = stateByDept[dept] || [];
-  const newState = newTeachers.map(t => {
-    const oldIdx = prevTeachers.findIndex(ot => ot.name === t.name);
-    return oldIdx !== -1 ? prevState[oldIdx] : emptyTeacherState();
-  });
+  // 편집한 부서 모두 반영 (모달에서 부서를 바꿔가며 편집한 경우 포함)
+  modalDrafts[lockModalActiveDept] = modalTeachers;
+  const drafts = {};
+  for (const dept of Object.keys(modalDrafts)) {
+    drafts[dept] = modalDrafts[dept]
+      .map(t => ({id: t.id || newTeacherId(), name: t.name.trim(), pin: t.pin.trim()}))  // 평문 그대로 저장
+      .filter(t => t.name && t.pin);
+    if (!drafts[dept].length) { showToast('⚠️ 선생님을 1명 이상 입력해주세요'); return; }
+  }
+  if (newOrg !== orgName || newPw) { markRosterDirty('junior'); markRosterDirty('senior'); }
   orgName = newOrg;
   if (newPw) adminPw = newPw; // 평문 저장
-  teachersByDept[dept] = newTeachers;
-  stateByDept[dept] = newState;
-  if (dept === activeDept) {
-    teachers = newTeachers; state = newState;
-    activeTeacher = Math.min(activeTeacher, teachers.length-1);
+  // 기록은 선생님 고유 ID로 연결 → 이름을 고치거나 순서를 바꿔도 기록 유지
+  for (const dept of Object.keys(drafts)) {
+    setRoster(dept, drafts[dept]);
+    markRosterDirty(dept);
   }
-
-  cloudCfg.enabled = document.getElementById('modal-supabase-enabled').checked;
-  saveCloudCfg();
-  setSyncStatus('', '');
+  teachers = teachersByDept[activeDept]; state = stateByDept[activeDept];
+  activeTeacher = Math.max(0, Math.min(activeTeacher, teachers.length-1));
 
   closeSettingsModal(); saveToLocal(); render(); showToast('✅ 저장되었습니다!');
 }
 /* ══════ LOCK MONTH UI (settings modal) ══════ */
 let lockModalActiveDept = 'junior';
+let modalDrafts = {}; // 모달에서 편집 중인 부서별 명단 (✅ 저장 전까지 실제 명단은 그대로)
 function lockModalSwitchDept(dept) {
   if (dept === lockModalActiveDept) return;
   // 편집 중이던 부서의 미저장 변경사항을 먼저 보존한 뒤 전환
-  teachersByDept[lockModalActiveDept] = modalTeachers.map(t => ({...t}));
+  modalDrafts[lockModalActiveDept] = modalTeachers.map(t => ({...t}));
   lockModalActiveDept = dept;
-  modalTeachers = (teachersByDept[dept] || []).map(t => ({...t}));
+  modalTeachers = (modalDrafts[dept] || teachersByDept[dept] || []).map(t => ({...t}));
   updateLockDeptButtons();
   renderLockMonthList();
   renderModalList();
@@ -1324,6 +1480,7 @@ function renderLockMonthList() {
         const idx = lockedMonths[dept].indexOf(mi);
         if (idx === -1) lockedMonths[dept].push(mi);
         else lockedMonths[dept].splice(idx, 1);
+        markRosterDirty(dept);
         saveToLocal();
         renderLockMonthList();
         render();
@@ -1360,6 +1517,7 @@ function toggleMonthLock(dept, mi) {
   const idx = lockedMonths[dept].indexOf(mi);
   if (idx === -1) lockedMonths[dept].push(mi);
   else lockedMonths[dept].splice(idx, 1);
+  markRosterDirty(dept);
   saveToLocal();
   render();
 }
@@ -1475,6 +1633,7 @@ function buildCalendar(ti, mi) {
         // 달력 아래 요약 즉시 업데이트
         const sumEl = document.getElementById(`bible-summary-${ti}-${mi}`);
         if(sumEl) updateBibleSummary(sumEl, ms, mo);
+        markRecordDirty(activeDept, teachers[ti].id);
         saveToLocal();
       });
       td.appendChild(cell);
@@ -1584,7 +1743,7 @@ function buildAttTable(ti, mi) {
     if(wi===null) mo.weeks.forEach((_,w)=>CATS.forEach((__,c)=>{ms.att[w][c]=val;}));
     else CATS.forEach((__,c)=>{ms.att[wi][c]=val;});
   }
-  function afterBulk(msg) { refreshATT(); updateStatsPanel(); if(session.role==='admin') buildTeacherTabs(); buildMonthTabs(); saveToLocal(); showToast(msg); }
+  function afterBulk(msg) { refreshATT(); updateStatsPanel(); if(session.role==='admin') buildTeacherTabs(); buildMonthTabs(); markRecordDirty(activeDept, teachers[ti].id); saveToLocal(); showToast(msg); }
 
   bulkBar.querySelector('[data-bulk="O"]').onclick=()=>{if(cantEdit(mi))return;bulkFillAtt(null,'O');afterBulk('✅ 이번 달 전체 O');};
   bulkBar.querySelector('[data-bulk="X"]').onclick=()=>{if(cantEdit(mi))return;bulkFillAtt(null,'X');afterBulk('✅ 이번 달 전체 X');};
@@ -1609,7 +1768,8 @@ function buildAttTable(ti, mi) {
     ms.att[wi2][ci2]=sel.value;
     sel.className='ox-sel'+(sel.value==='O'?' val-o':sel.value==='X'?' val-x':'');
     CATS.forEach((_,ci)=>{const cell=document.getElementById(`astat-${mi}-${ci}`);if(cell){const pct=calcPct(mo.weeks.map((_,wi)=>ms.att[wi][ci]));cell.textContent=pct!==null?pct+'%':'-';}});
-    updateStatsPanel(); if(session.role==='admin') buildTeacherTabs(); buildMonthTabs(); saveToLocal();
+    updateStatsPanel(); if(session.role==='admin') buildTeacherTabs(); buildMonthTabs();
+    markRecordDirty(activeDept, teachers[ti].id); saveToLocal();
   });
 
   // 지난 회기: 입력 칸과 버튼 모두 비활성화
@@ -1745,6 +1905,10 @@ if (new URLSearchParams(location.search).get('clear') === '1') {
   localStorage.removeItem(LS_KEY);
   history.replaceState(null, '', location.pathname);
 }
+// 선생님 고유 ID 부여 (예전 명단은 순서대로 t_1, t_2 ...)
+teachersByDept.junior = ensureIds(teachersByDept.junior);
+teachersByDept.senior = ensureIds(teachersByDept.senior);
+teachers = teachersByDept[activeDept];
 loadFromLocal();
 
 buildLoginTeacherSelect();
@@ -1752,73 +1916,18 @@ buildLoginTeacherSelect();
 document.getElementById('app-screen').classList.add('hidden');
 document.getElementById('login-screen').classList.remove('hidden');
 
-// 클라우드 동기화: 활성화 여부와 관계없이 항상 최신 데이터 자동 로드
-// (새 기기에서도 cloudCfg.enabled가 false여도 서버에서 불러옴)
+// 서버에서 최신 명단·선생님별 기록 불러오기
 (async function autoSyncOnLoad() {
-  setSyncStatus('☁️ 동기화 중...', 'syncing');
+  setSyncStatus('☁️ 불러오는 중...', 'syncing');
   try {
-    const results = {};
-    for (const dept of ['junior', 'senior']) {
-      const res = await fetch('/supabase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dept, method: 'GET' })
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      results[dept] = await res.json();
-    }
-
-    function parseStateArr(rawArr) {
-      return rawArr.map(ts2 => CUR_MONTHS.map((mo, mi) => {
-        const s = ts2 ? ts2[mi] : null;
-        if (!s) return emptyMonthState(mo);
-        if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
-        return fixMonthState({att: s.att || [], bible: s.bible || {}}, mo);
-      }));
-    }
-
-    let updated = false;
-    for (const dept of ['junior', 'senior']) {
-      const d = results[dept];
-      if (!d?.teachers?.length) continue;
-      const localTs = tsByDept[dept] || 0;
-      const cloudTs = d._ts || 0;
-      if (cloudTs >= localTs) {
-        if (d.org_name) orgName = d.org_name;
-        if (d.admin_pw) adminPw = d.admin_pw;
-        if (d.locked_months) {
-          lockedMonths.junior = d.locked_months.junior || lockedMonths.junior;
-          lockedMonths.senior = d.locked_months.senior || lockedMonths.senior;
-        }
-        teachersByDept[dept] = d.teachers;
-        if (d.state?.length) {
-          stateByDept[dept] = parseStateArr(d.state);
-          while (stateByDept[dept].length < teachersByDept[dept].length)
-            stateByDept[dept].push(emptyTeacherState());
-        }
-        tsByDept[dept] = cloudTs;
-        updated = true;
-        // 클라우드 동기화 자동 활성화
-        cloudCfg.enabled = true;
-      }
-    }
-
-    if (updated) {
-      if (!isPast()) {
-        teachers = teachersByDept[activeDept];
-        state = stateByDept[activeDept];
-      }
-      localStorage.setItem(LS_KEY, JSON.stringify({orgName, adminPw, teachersByDept, stateByDept, lockedMonths, tsByDept}));
-      saveCloudCfg();
-      buildLoginTeacherSelect();
-    }
-    const now = new Date();
-    const ts = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-    setSyncStatus(`✅ 동기화됨 (${ts})`, 'synced');
+    await reloadFromServer();
+    setSyncStatus(`✅ 동기화됨 (${hhmm()})`, 'synced');
+    refreshScreen();
+    if (hasPending()) scheduleServerSave(500);
   } catch(e) {
-    // 함수 없거나 오프라인이면 조용히 무시
-    if (cloudCfg.enabled) setSyncStatus('❌ 동기화 실패', 'error');
-    else document.getElementById('sync-status').classList.add('hidden');
+    console.error('Initial load failed:', e);
+    setSyncStatus('❌ 서버에서 불러오지 못함', 'error');
+    if (hasPending()) scheduleServerSave(5000);
   }
 })();
 

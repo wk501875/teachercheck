@@ -6,7 +6,11 @@
 - `main` 브랜치에 머지되면 Cloudflare Pages(teachercheck.pages.dev)로 자동 배포됨. 빌드 과정 없음.
 - 데이터는 Supabase의 `checklist_data` 테이블에 부서별 한 행으로 저장.
   - id가 `junior` / `senior` 인 행: 2026 회기 운영 데이터. 다른 사이트가 실제 사용 중. 이 사이트에서는 "2026 회기" 조회 화면에서 **읽기만** 함(`season: 2026` GET 요청).
-  - id가 `junior_2027` / `senior_2027` 인 행: 이 저장소가 쓰는 새 회기 데이터(`functions/supabase.js`의 `ROW_SUFFIX`).
+  - id가 `junior_2027` / `senior_2027` 인 행: 이 저장소가 쓰는 새 회기의 **명단·PIN·마감 설정**(`functions/supabase.js`의 `ROW_SUFFIX`). 이 행의 `state` 칸은 예전 통째 저장분으로, 새 구조로 옮겨지기 전 기록을 보여줄 때만 읽음.
+- 2027 회기 **선생님별 기록**은 `teacher_records` 테이블에 선생님 한 명당 한 행(`season`, `dept`, `teacher_id`, `state`, `version`).
+  - 선생님은 이름이 아닌 고유 ID(`id`)로 구분. 예전 명단(id 없음)은 순서대로 `t_1`, `t_2` ...
+  - 저장은 `version`이 맞을 때만 성공(오래된 화면이 덮어쓰지 못함). 충돌하면 화면에서 바뀐 칸만 최신 기록 위에 병합 후 다시 저장.
+  - 명단 행 저장도 `updated_at`이 맞을 때만 성공. 부서 전체를 통째로 저장하는 방식(`PUT`)은 쓰지 않음.
 - 사용자는 개발자가 아니고 태블릿으로 작업함. 설명은 한국어로 쉽게.
 
 ## 반드시 지킬 규칙
