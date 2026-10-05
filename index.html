@@ -377,8 +377,8 @@
 
   <div class="season-bar">
     <span class="season-label">📅 회기</span>
-    <button class="t-tab" id="season-2026" onclick="switchSeason(2026)">2026 회기</button>
-    <button class="t-tab active" id="season-2027" onclick="switchSeason(2027)">2027 회기</button>
+    <button class="t-tab" id="season-past" onclick="switchSeason(PAST_YEAR)">지난 회기</button>
+    <button class="t-tab active" id="season-cur" onclick="switchSeason(YEAR)">현재 회기</button>
     <span class="season-notice hidden" id="season-notice">👀 지난 회기는 조회만 가능합니다</span>
   </div>
 
@@ -474,6 +474,7 @@
         &nbsp;&nbsp;updated_at TIMESTAMPTZ DEFAULT now()<br>
         );<br>
         INSERT INTO checklist_data (id) VALUES ('junior_2027'), ('senior_2027')<br>
+        -- 다음 회기부터는 명단 행이 자동으로 만들어집니다<br>
         ON CONFLICT DO NOTHING;
         </code><br>
         ⑤ 페이지를 새로고침하면 자동으로 서버와 연결됩니다
@@ -513,12 +514,27 @@
 </div>
 
 <script>
+/* ══════ 회기 ══════
+ * 회기 N = (N-1)년 12월 ~ N년 12월 (13개월). 매년 12월 1일(한국 시간)부터 다음 회기.
+ * 현재 회기는 서버 시간으로 정함: 마지막으로 서버가 알려준 회기(SEASON_HINT_KEY)로 화면을 열고,
+ * 서버 응답의 current_season과 다르면 그 회기로 저장한 뒤 화면을 새로 엶.
+ */
+const SEASON_HINT_KEY = 'checklist_season';
+function seasonForDate(d) {
+  const kst = new Date(d.getTime() + 9 * 3600 * 1000);
+  return kst.getUTCMonth() === 11 ? kst.getUTCFullYear() + 1 : kst.getUTCFullYear();
+}
+const YEAR = (() => {
+  try { const h = +localStorage.getItem(SEASON_HINT_KEY); if (Number.isInteger(h) && h >= 2027) return h; } catch(e) {}
+  return Math.max(2027, seasonForDate(new Date())); // 첫 방문: 기기 시계로 추정 → 서버가 바로잡음
+})();
+const PAST_YEAR = YEAR - 1; // 조회 가능한 지난 회기는 직전 회기 하나뿐
+
 /* ══════ CONSTANTS ══════ */
-const YEAR = 2027;
 const CATS = ['교회학교','주일말씀','수요말씀','구역모임','청년회교제'];
 const CAT_COLORS = ['#4fa8d5','#f5a623','#8b6fbf','#5bb974','#e8728a'];
 const MONTH_COLORS = ['#e67e22','#e8728a','#8b6fbf','#4fa8d5','#f5a623','#5bb974','#2980b9','#16a085','#8e44ad','#c0392b','#27ae60','#d35400','#b8860b'];
-const LS_KEY = 'checklist_2027_v1';
+const LS_KEY = `checklist_${YEAR}_v1`; // 회기별 브라우저 저장 키
 const DAY_NAMES = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
 function getWeeks(y, m) {
@@ -548,9 +564,8 @@ function buildSeasonMonths(y) {
   }
   return months;
 }
-const PAST_YEAR = 2026;
-const CUR_MONTHS = buildSeasonMonths(YEAR);       // 2027 회기 (입력·저장 대상)
-const PAST_MONTHS = buildSeasonMonths(PAST_YEAR); // 2026 회기 (조회 전용)
+const CUR_MONTHS = buildSeasonMonths(YEAR);       // 현재 회기 (입력·저장 대상)
+const PAST_MONTHS = buildSeasonMonths(PAST_YEAR); // 직전 회기 (조회 전용)
 let MONTHS = CUR_MONTHS; // 지금 화면에 보이는 회기의 달 목록
 let viewYear = YEAR;     // 지금 화면에 보이는 회기
 function isPast() { return viewYear !== YEAR; }
@@ -667,9 +682,9 @@ async function pinMatches(plain, stored) {
 // 서버 저장은 항상 켜져 있음 (예전 '클라우드 동기화 활성화' 체크박스는 제거)
 
 /* ══════ STORAGE ══════ */
-// 서버 저장 구조 (2027 회기)
+// 서버 저장 구조 (현재 회기)
 //  · 선생님 한 명의 기록 = teacher_records 한 행 (선생님 고유 ID로 구분)
-//  · 명단·PIN·마감 설정 = checklist_data의 2027 행
+//  · 명단·PIN·마감 설정 = checklist_data의 `${부서}_${회기}` 행
 // recMeta[dept][id] = { version, base }  base = 마지막으로 서버와 맞춘 기록 (동시 저장 시 병합 기준)
 let recMeta = { junior: {}, senior: {} };
 let rosterMeta = { junior: null, senior: null }; // { version, base }
@@ -715,7 +730,7 @@ function persistLocal() {
   } catch(e) { if(e && e.name==='QuotaExceededError') showToast('⚠️ 저장 공간이 부족합니다. 파일로 저장해주세요.'); }
 }
 function saveToLocal() {
-  if (isPast()) return; // 2026 조회 중에는 브라우저 저장 안 함
+  if (isPast()) return; // 지난 회기 조회 중에는 브라우저 저장 안 함
   // 반드시 현재 부서 참조를 전체 구조에 반영
   teachersByDept[activeDept] = teachers;
   stateByDept[activeDept] = state;
@@ -780,6 +795,28 @@ function hideSaveError() {
 }
 
 /* ══════ SERVER SAVE (선생님별 저장) ══════ */
+// 서버가 알려준 현재 회기가 이 화면의 회기와 다르면 → 그 회기로 화면을 새로 엶
+let reloadingForSeason = false;
+function checkServerSeason(serverSeason) {
+  if (!Number.isInteger(serverSeason) || serverSeason === YEAR) {
+    try { localStorage.setItem(SEASON_HINT_KEY, String(YEAR)); } catch(e) {}
+    return false;
+  }
+  if (reloadingForSeason) return true;
+  try { localStorage.setItem(SEASON_HINT_KEY, String(serverSeason)); } catch(e) {}
+  // 새로고침이 반복되지 않도록 (15초 안에 다시 맞지 않으면 멈추고 안내)
+  let last = 0;
+  try { last = +sessionStorage.getItem('checklist_season_reload') || 0; } catch(e) {}
+  if (Date.now() - last < 15000) {
+    showSaveError('⚠️ 회기 정보가 맞지 않습니다. 잠시 후 페이지를 새로고침해주세요.');
+    return true;
+  }
+  try { sessionStorage.setItem('checklist_season_reload', String(Date.now())); } catch(e) {}
+  reloadingForSeason = true;
+  showToast(serverSeason > YEAR ? `🎉 ${serverSeason} 회기가 시작되었습니다. 화면을 새로 엽니다` : '📅 회기를 맞추는 중입니다. 화면을 새로 엽니다');
+  setTimeout(() => location.reload(), 1500);
+  return true;
+}
 async function api(payload) {
   try {
     const res = await fetch('/supabase', {
@@ -790,7 +827,9 @@ async function api(payload) {
     });
     let data = null;
     try { data = await res.json(); } catch(e) {}
-    return { ok: res.ok, status: res.status, data: data || {} };
+    data = data || {};
+    if (data.current_season) checkServerSeason(data.current_season);
+    return { ok: res.ok, status: res.status, data };
   } catch(e) {
     return { ok: false, status: 0, data: { error: '인터넷 연결을 확인해주세요' } };
   }
@@ -887,7 +926,7 @@ async function saveRoster(dept) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const meta = rosterMeta[dept];
     const sent = rosterSnapshot(dept);
-    const r = await api({ dept, method: 'SAVE_ROSTER', body: {
+    const r = await api({ dept, season: YEAR, method: 'SAVE_ROSTER', body: {
       org_name: sent.org_name, admin_pw: sent.admin_pw, teachers: sent.teachers,
       locked_months: {...clone(lockedMonths), [dept]: sent.locked},
       roster_version: meta ? meta.version : null
@@ -921,7 +960,7 @@ async function saveRecord(dept, id) {
     if (ti === -1) { delete pendingRecords[key]; return; } // 명단에서 삭제된 선생님
     const meta = recMeta[dept][id] || (recMeta[dept][id] = { version: 0, base: emptyTeacherState() });
     const sent = clone(stateByDept[dept][ti]);
-    const r = await api({ dept, method: 'SAVE_RECORD', body: { teacher_id: id, state: sent, version: meta.version } });
+    const r = await api({ dept, season: YEAR, method: 'SAVE_RECORD', body: { teacher_id: id, state: sent, version: meta.version } });
     if (r.ok) {
       meta.version = r.data.version; meta.base = sent;
       const cur = teachersByDept[dept].findIndex(t => t.id === id);
@@ -955,10 +994,14 @@ function scheduleServerSave(delay = SAVE_DELAY) {
   if (!saveFailCount) setSyncStatus('✏️ 저장 대기 중...', 'syncing');
 }
 function saveErrorMessage(e) {
+  if (e.code === 'season_closed')
+    return '⚠️ 지난 회기가 되어 더 이상 저장할 수 없습니다. 화면을 새로 열어 새 회기에 입력해주세요.';
+  if (e.code === 'roster_create_failed')
+    return `⚠️ ${e.message}`;
   if (e.code === 'records_table_missing')
     return '⚠️ 서버에 선생님 기록 저장 공간이 아직 없어 저장되지 않았습니다. 관리자에게 알려주세요. (입력한 내용은 이 기기에 임시 보관 중)';
   if (e.code === 'roster_row_missing')
-    return '⚠️ 서버에 2027 명단 행이 없어 저장되지 않았습니다. 관리자에게 알려주세요. (입력한 내용은 이 기기에 임시 보관 중)';
+    return `⚠️ 서버에 ${YEAR} 회기 명단이 없어 저장되지 않았습니다. 관리자에게 알려주세요. (입력한 내용은 이 기기에 임시 보관 중)`;
   return `⚠️ 서버 저장 실패: ${e.message} (입력한 내용은 이 기기에 임시 보관 중)`;
 }
 async function doFlush() {
@@ -998,8 +1041,9 @@ function retryServerSave() { saveFailCount = 0; flushServerSaves(); }
 async function loadFromServer() {
   const results = {};
   for (const dept of ['junior', 'senior']) {
-    const r = await api({ dept, method: 'GET' });
+    const r = await api({ dept, season: YEAR, method: 'GET' });
     if (!r.ok) throw apiError(r);
+    if (r.data.current_season && r.data.current_season !== YEAR) throw new Error('새 회기로 화면을 새로 여는 중입니다');
     results[dept] = r.data;
   }
   let latestVer = '';
@@ -1094,9 +1138,12 @@ async function manualSync() {
 // 화면을 닫거나 다른 앱으로 넘어갈 때: 아직 안 올라간 내 기록만 저장 (부서 전체를 올리지 않음)
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') flushServerSaves();
+  else api({ method: 'SEASON' }); // 다시 볼 때 회기가 바뀌었는지 확인
 });
+// 오래 열어둔 화면도 12월 1일이 지나면 새 회기로 넘어가도록 10분마다 확인
+setInterval(() => { if (document.visibilityState === 'visible') api({ method: 'SEASON' }); }, 10 * 60 * 1000);
 window.addEventListener('beforeunload', e => {
-  if (isPast() || !hasPending()) return;
+  if (reloadingForSeason || isPast() || !hasPending()) return;
   flushServerSaves();
   e.preventDefault();
   e.returnValue = '';
@@ -1282,8 +1329,8 @@ function showApp() {
   render({center: true});
 }
 
-/* ══════ 회기 선택 (2026 조회 전용) ══════ */
-// 2026 데이터는 화면 표시용으로 메모리에만 보관 — localStorage·2027 행에는 절대 저장하지 않음
+/* ══════ 회기 선택 (지난 회기 조회 전용) ══════ */
+// 지난 회기 데이터는 화면 표시용으로 메모리에만 보관 — localStorage·현재 회기 행에는 절대 저장하지 않음
 let pastData = null; // { teachersByDept, stateByDept }
 let switchingSeason = false;
 
@@ -1291,13 +1338,9 @@ async function loadPastSeason() {
   if (pastData) return;
   const data = { teachersByDept: {junior: [], senior: []}, stateByDept: {junior: [], senior: []} };
   for (const dept of ['junior', 'senior']) {
-    const res = await fetch('/supabase', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dept, method: 'GET', season: PAST_YEAR })
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const d = await res.json();
+    const r = await api({ dept, method: 'GET', season: PAST_YEAR });
+    if (!r.ok) throw apiError(r);
+    const d = r.data;
     data.teachersByDept[dept] = (d.teachers || []).map(t => ({name: t.name}));
     data.stateByDept[dept] = data.teachersByDept[dept].map((_, ti) => {
       const ts = (d.state || [])[ti];
@@ -1312,7 +1355,7 @@ async function loadPastSeason() {
   pastData = data;
 }
 
-// 2026 화면에 보여줄 선생님 목록: 관리자는 전체, 선생님은 본인 이름과 같은 기록만
+// 지난 회기 화면에 보여줄 선생님 목록: 관리자는 전체, 선생님은 본인 이름과 같은 기록만
 function setPastView(dept) {
   const pt = pastData.teachersByDept[dept], ps = pastData.stateByDept[dept];
   activeTeacher = 0;
@@ -1345,10 +1388,10 @@ async function switchSeason(y) {
     if (y === PAST_YEAR) {
       try { await loadPastSeason(); }
       catch (e) { console.error('loadPastSeason:', e); showToast('❌ 지난 회기 기록을 불러오지 못했습니다'); return; }
-      // 2027 편집 내용을 먼저 반영하고, 대기 중인 동기화는 전환 전에 마무리
+      // 현재 회기 편집 내용을 먼저 반영하고, 대기 중인 동기화는 전환 전에 마무리
       teachersByDept[activeDept] = teachers;
       stateByDept[activeDept] = state;
-      await flushServerSaves(); // 대기 중인 2027 저장을 먼저 마무리
+      await flushServerSaves(); // 대기 중인 현재 회기 저장을 먼저 마무리
       viewYear = PAST_YEAR; MONTHS = PAST_MONTHS;
       setPastView(activeDept);
       activeMonth = todayMonthIndex();
@@ -1362,8 +1405,10 @@ async function switchSeason(y) {
 
 function applySeasonUI() {
   const past = isPast();
-  document.getElementById('season-2026').className = 't-tab' + (past ? ' active' : '');
-  document.getElementById('season-2027').className = 't-tab' + (past ? '' : ' active');
+  const pastBtn = document.getElementById('season-past'), curBtn = document.getElementById('season-cur');
+  pastBtn.textContent = `${PAST_YEAR} 회기`; curBtn.textContent = `${YEAR} 회기`;
+  pastBtn.className = 't-tab' + (past ? ' active' : '');
+  curBtn.className = 't-tab' + (past ? '' : ' active');
   document.getElementById('season-notice').classList.toggle('hidden', !past);
   ['btn-file-save','btn-file-load','btn-cloud','btn-settings','btn-cloud-save','btn-change-pin','btn-missing']
     .forEach(id => { document.getElementById(id).disabled = past; });
@@ -1391,7 +1436,7 @@ async function applyChangePin() {
   if (!nw || nw !== cf) { document.getElementById('pin-confirm-error').classList.remove('hidden'); ok = false; }
   else document.getElementById('pin-confirm-error').classList.add('hidden');
   if (!ok) return;
-  const r = await api({ dept: activeDept, method: 'SET_PIN', body: { teacher_id: session.teacherId, old_pin: cur, new_pin: nw } });
+  const r = await api({ dept: activeDept, season: YEAR, method: 'SET_PIN', body: { teacher_id: session.teacherId, old_pin: cur, new_pin: nw } });
   if (!r.ok) {
     if (r.data.code === 'wrong_pin') { document.getElementById('pin-current-error').classList.remove('hidden'); return; }
     showToast('❌ PIN 변경 실패: ' + (r.data.error || `HTTP ${r.status}`)); return;
@@ -1956,7 +2001,7 @@ function updateStatsPanel() {
 function adminSwitchDept(dept) {
   if (dept === activeDept) return; // 동일 부서 재클릭 무시
   if (isPast()) {
-    // 지난 회기: 2027 데이터는 건드리지 않고 2026 화면만 전환
+    // 지난 회기: 현재 회기 데이터는 건드리지 않고 지난 회기 화면만 전환
     activeDept = dept;
     setPastView(dept);
   } else {
@@ -1995,6 +2040,8 @@ if (new URLSearchParams(location.search).get('clear') === '1') {
   localStorage.removeItem(LS_KEY);
   history.replaceState(null, '', location.pathname);
 }
+document.getElementById('season-past').textContent = `${PAST_YEAR} 회기`;
+document.getElementById('season-cur').textContent = `${YEAR} 회기`;
 // 선생님 고유 ID 부여 (예전 명단은 순서대로 t_1, t_2 ...)
 teachersByDept.junior = ensureIds(teachersByDept.junior);
 teachersByDept.senior = ensureIds(teachersByDept.senior);
