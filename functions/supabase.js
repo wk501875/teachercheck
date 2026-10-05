@@ -99,7 +99,7 @@ async function createSeasonRoster(dept, season) {
   });
   // 409 = 다른 화면이 방금 먼저 만듦 (정상)
   if (!r.ok && r.status !== 409) {
-    throw new HttpError(502, `새 회기(${season}) 명단을 만들지 못했습니다 (${r.status}). 관리자가 SQL을 실행했는지 확인해주세요.`, { code: 'roster_create_failed' });
+    throw new HttpError(502, `${season}년 명단을 만들지 못했습니다 (${r.status}). 관리자가 SQL을 실행했는지 확인해주세요.`, { code: 'roster_create_failed' });
   }
   return getRoster(dept, season);
 }
@@ -272,7 +272,7 @@ export async function onRequestPost(context) {
   const reqSeason = hasSeason ? Number(season) : cur;
   // 조회 가능한 회기: 현재 + 직전 회기뿐
   if (!Number.isInteger(reqSeason) || (reqSeason !== cur && reqSeason !== cur - 1)) {
-    return json({ error: '조회할 수 없는 회기입니다', code: 'season_not_viewable', current_season: cur }, 403);
+    return json({ error: '조회할 수 없는 연도입니다', code: 'season_not_viewable', current_season: cur }, 403);
   }
 
   const withSeason = async (resPromise) => {
@@ -297,7 +297,7 @@ export async function onRequestPost(context) {
       return json({ error: '사이트가 업데이트되었습니다. 페이지를 새로고침 해주세요.', code: 'outdated_client', current_season: cur }, 410);
     }
     if (reqSeason !== cur || reqSeason <= LEGACY_SEASON) {
-      return json({ error: '지난 회기는 조회만 가능합니다', code: 'season_closed', current_season: cur }, 403);
+      return json({ error: '지난해 기록은 조회만 가능합니다', code: 'season_closed', current_season: cur }, 403);
     }
     if (method === 'SAVE_ROSTER') return await withSeason(handleSaveRoster(dept, cur, payload));
     if (method === 'SET_PIN') return await withSeason(handleSetPin(dept, cur, payload));

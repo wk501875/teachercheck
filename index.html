@@ -351,10 +351,10 @@
 
   <div class="season-bar">
     <div class="seg">
-      <button class="btn" id="season-past" onclick="switchSeason(PAST_YEAR)">지난 회기</button>
-      <button class="btn btn-sky" id="season-cur" onclick="switchSeason(YEAR)">현재 회기</button>
+      <button class="btn" id="season-past" onclick="switchSeason(PAST_YEAR)">지난해</button>
+      <button class="btn btn-sky" id="season-cur" onclick="switchSeason(YEAR)">올해</button>
     </div>
-    <span class="season-notice hidden" id="season-notice">지난 회기는 조회만 가능합니다</span>
+    <span class="season-notice hidden" id="season-notice">지난해 기록은 조회만 가능합니다</span>
   </div>
 
   <div class="teacher-wrap card hidden" id="teacher-selector-wrap">
@@ -377,7 +377,7 @@
 
   <div class="stats-panel card" id="stats-panel">
     <div class="panel-title" id="stats-title">항목별 현황</div>
-    <div class="panel-sub">회기 전체 참석 기준 · O / 입력 횟수</div>
+    <div class="panel-sub">1년 전체 참석 기준 · O / 입력 횟수</div>
     <div id="cat-stats"></div>
     <div class="divider"></div>
     <div class="panel-title">월별 현황</div>
@@ -449,7 +449,7 @@
         &nbsp;&nbsp;updated_at TIMESTAMPTZ DEFAULT now()<br>
         );<br>
         INSERT INTO checklist_data (id) VALUES ('junior_2027'), ('senior_2027')<br>
-        -- 다음 회기부터는 명단 행이 자동으로 만들어집니다<br>
+        -- 다음 해부터는 명단 행이 자동으로 만들어집니다<br>
         ON CONFLICT DO NOTHING;
         </code><br>
         ⑤ 페이지를 새로고침하면 자동으로 서버와 연결됩니다
@@ -562,7 +562,7 @@ function todayWeekIndex(mo) {
 function weekRangeText(mo, wk) {
   return wk.start === wk.end ? `${mo.month}/${wk.start}` : `${mo.month}/${wk.start}~${mo.month}/${wk.end}`;
 }
-const PAST_MSG = '👀 지난 회기는 조회만 가능합니다';
+const PAST_MSG = `${PAST_YEAR}년 기록은 조회만 가능합니다`;
 
 // state[ti][mi] = { att: weeks×cats (O/X/''), bible: {day: 'O'|'X'|''} }
 function emptyMonthState(mo) {
@@ -787,12 +787,12 @@ function checkServerSeason(serverSeason) {
   let last = 0;
   try { last = +sessionStorage.getItem('checklist_season_reload') || 0; } catch(e) {}
   if (Date.now() - last < 15000) {
-    showSaveError('⚠️ 회기 정보가 맞지 않습니다. 잠시 후 페이지를 새로고침해주세요.');
+    showSaveError('⚠️ 연도 정보가 맞지 않습니다. 잠시 후 페이지를 새로고침해주세요.');
     return true;
   }
   try { sessionStorage.setItem('checklist_season_reload', String(Date.now())); } catch(e) {}
   reloadingForSeason = true;
-  showToast(serverSeason > YEAR ? `🎉 ${serverSeason} 회기가 시작되었습니다. 화면을 새로 엽니다` : '📅 회기를 맞추는 중입니다. 화면을 새로 엽니다');
+  showToast(serverSeason > YEAR ? `🎉 ${serverSeason}년 기록이 시작되었습니다. 화면을 새로 엽니다` : '📅 연도를 맞추는 중입니다. 화면을 새로 엽니다');
   setTimeout(() => location.reload(), 1500);
   return true;
 }
@@ -974,13 +974,13 @@ function scheduleServerSave(delay = SAVE_DELAY) {
 }
 function saveErrorMessage(e) {
   if (e.code === 'season_closed')
-    return '⚠️ 지난 회기가 되어 더 이상 저장할 수 없습니다. 화면을 새로 열어 새 회기에 입력해주세요.';
+    return `⚠️ ${YEAR}년 기록은 마감되어 더 이상 저장할 수 없습니다. 화면을 새로 열어 새해 기록에 입력해주세요.`;
   if (e.code === 'roster_create_failed')
     return `⚠️ ${e.message}`;
   if (e.code === 'records_table_missing')
     return '⚠️ 서버에 선생님 기록 저장 공간이 아직 없어 저장되지 않았습니다. 관리자에게 알려주세요. (입력한 내용은 이 기기에 임시 보관 중)';
   if (e.code === 'roster_row_missing')
-    return `⚠️ 서버에 ${YEAR} 회기 명단이 없어 저장되지 않았습니다. 관리자에게 알려주세요. (입력한 내용은 이 기기에 임시 보관 중)`;
+    return `⚠️ 서버에 ${YEAR}년 명단이 없어 저장되지 않았습니다. 관리자에게 알려주세요. (입력한 내용은 이 기기에 임시 보관 중)`;
   return `⚠️ 서버 저장 실패: ${e.message} (입력한 내용은 이 기기에 임시 보관 중)`;
 }
 async function doFlush() {
@@ -1022,7 +1022,7 @@ async function loadFromServer() {
   for (const dept of ['junior', 'senior']) {
     const r = await api({ dept, season: YEAR, method: 'GET' });
     if (!r.ok) throw apiError(r);
-    if (r.data.current_season && r.data.current_season !== YEAR) throw new Error('새 회기로 화면을 새로 여는 중입니다');
+    if (r.data.current_season && r.data.current_season !== YEAR) throw new Error('새해 화면으로 새로 여는 중입니다');
     results[dept] = r.data;
   }
   let latestVer = '';
@@ -1377,7 +1377,7 @@ async function switchSeason(y) {
   try {
     if (y === PAST_YEAR) {
       try { await loadPastSeason(); }
-      catch (e) { console.error('loadPastSeason:', e); showToast('❌ 지난 회기 기록을 불러오지 못했습니다'); return; }
+      catch (e) { console.error('loadPastSeason:', e); showToast(`❌ ${PAST_YEAR}년 기록을 불러오지 못했습니다`); return; }
       // 현재 회기 편집 내용을 먼저 반영하고, 대기 중인 동기화는 전환 전에 마무리
       teachersByDept[activeDept] = teachers;
       stateByDept[activeDept] = state;
@@ -1396,9 +1396,10 @@ async function switchSeason(y) {
 function applySeasonUI() {
   const past = isPast();
   const pastBtn = document.getElementById('season-past'), curBtn = document.getElementById('season-cur');
-  pastBtn.textContent = `${PAST_YEAR} 회기`; curBtn.textContent = `${YEAR} 회기`;
+  pastBtn.textContent = `${PAST_YEAR}년`; curBtn.textContent = `${YEAR}년`;
   pastBtn.className = 'btn' + (past ? ' btn-sky' : '');
   curBtn.className = 'btn' + (past ? '' : ' btn-sky');
+  document.getElementById('season-notice').textContent = PAST_MSG;
   document.getElementById('season-notice').classList.toggle('hidden', !past);
   ['btn-file-save','btn-file-load','btn-cloud','btn-settings','btn-cloud-save','btn-change-pin','btn-missing']
     .forEach(id => { document.getElementById(id).disabled = past; });
@@ -1876,7 +1877,7 @@ function adminSwitchDept(dept) {
 /* ══════ RENDER ══════ */
 // opts.center: 탭 가로 위치 맞춤 (탭을 눌렀을 때·화면을 처음 열 때만)
 function updateTopSub() {
-  document.getElementById('top-sub').textContent = `${DEPTS[activeDept].label} · ${viewYear} 회기`;
+  document.getElementById('top-sub').textContent = `${DEPTS[activeDept].label} · ${viewYear}년`;
 }
 function render(opts = {}) {
   const center = !!opts.center;
@@ -1887,7 +1888,7 @@ function render(opts = {}) {
   document.getElementById('stats-panel').classList.toggle('hidden', noRecord);
   if (session.role==='admin') buildTeacherTabs(center);
   if (noRecord) {
-    document.getElementById('main-card').innerHTML = '<div class="card"><div class="no-record">지난 회기 기록이 없습니다</div></div>';
+    document.getElementById('main-card').innerHTML = `<div class="card"><div class="no-record">${PAST_YEAR}년 기록이 없습니다</div></div>`;
   } else {
     buildMonthTabs(center); buildMainCard(); updateStatsPanel();
   }
@@ -1900,8 +1901,8 @@ if (new URLSearchParams(location.search).get('clear') === '1') {
   localStorage.removeItem(LS_KEY);
   history.replaceState(null, '', location.pathname);
 }
-document.getElementById('season-past').textContent = `${PAST_YEAR} 회기`;
-document.getElementById('season-cur').textContent = `${YEAR} 회기`;
+document.getElementById('season-past').textContent = `${PAST_YEAR}년`;
+document.getElementById('season-cur').textContent = `${YEAR}년`;
 // 선생님 고유 ID 부여 (예전 명단은 순서대로 t_1, t_2 ...)
 teachersByDept.junior = ensureIds(teachersByDept.junior);
 teachersByDept.senior = ensureIds(teachersByDept.senior);
@@ -2153,7 +2154,7 @@ function exportExcel() {
   merges.push({ s: { r: 0, c: col }, e: { r: 0, c: col + ALL_CATS.length - 1 } });
   ws['!merges'] = merges;
 
-  const titleText = `${viewYear} ${deptLabel} 교사 체크리스트 (${fromLabel}~${toLabel})`;
+  const titleText = `${viewYear}년 ${deptLabel} 교사 체크리스트 (${fromLabel}~${toLabel})`;
   XLSX.utils.book_append_sheet(wb, ws, deptLabel);
   XLSX.writeFile(wb, `${titleText}.xlsx`);
   closeReportModal();
@@ -2257,7 +2258,7 @@ function printReport() {
   });
   tbody += '</tbody>';
 
-  const titleText = `${viewYear} ${deptLabel.replace(/[🌱✝️]/g,'').trim()} 교사 체크리스트 (${fromLabel}~${toLabel})`;
+  const titleText = `${viewYear}년 ${deptLabel.replace(/[🌱✝️]/g,'').trim()} 교사 체크리스트 (${fromLabel}~${toLabel})`;
   const html = `<div class="rpt-title">${titleText}</div><table class="rpt-table">${thead}${tbody}</table>`;
 
   document.getElementById('report-print-area').innerHTML = html;
