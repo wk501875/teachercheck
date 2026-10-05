@@ -96,6 +96,14 @@
   .t-tab.has-data{border-color:var(--green);color:var(--green);}
   .t-tab.has-data.active{background:var(--green);border-color:var(--green);color:white;}
 
+  /* ── Season bar ── */
+  .season-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+  .season-label{font-size:12px;font-weight:900;color:var(--muted);margin-right:2px;}
+  .season-notice{font-size:11px;font-weight:700;color:var(--gold);background:#fff8e6;border:1.5px solid var(--gold);border-radius:999px;padding:3px 10px;}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .bbtn:disabled,.ox-sel:disabled{opacity:.4;cursor:not-allowed;}
+  .no-record{text-align:center;padding:40px 16px;font-size:14px;font-weight:700;color:var(--muted);}
+
   /* ── Month tabs ── */
   .month-tabs-wrap{overflow-x:auto;margin-bottom:14px;}
   .month-tabs-wrap::-webkit-scrollbar{height:3px;}
@@ -317,6 +325,13 @@
     <input type="file" id="file-input" accept=".json" onchange="importData(event)" />
   </div>
 
+  <div class="season-bar">
+    <span class="season-label">📅 회기</span>
+    <button class="t-tab" id="season-2026" onclick="switchSeason(2026)">2026 회기</button>
+    <button class="t-tab active" id="season-2027" onclick="switchSeason(2027)">2027 회기</button>
+    <span class="season-notice hidden" id="season-notice">👀 지난 회기는 조회만 가능합니다</span>
+  </div>
+
   <div class="teacher-wrap hidden" id="teacher-selector-wrap">
     <div class="teacher-header">
       <div class="teacher-header-left">
@@ -331,11 +346,11 @@
     <div class="teacher-scroll"><div class="teacher-tabs" id="teacher-tabs"></div></div>
   </div>
 
-  <div class="month-tabs-wrap"><div class="month-tabs" id="month-tabs"></div></div>
+  <div class="month-tabs-wrap" id="month-tabs-wrap"><div class="month-tabs" id="month-tabs"></div></div>
 
   <div class="main-card" id="main-card"></div>
 
-  <div class="stats-panel">
+  <div class="stats-panel" id="stats-panel">
     <div class="panel-title" id="stats-title">📊 항목별 체크 현황</div>
     <div class="panel-sub">연간 전체 합산 기준</div>
     <div id="cat-stats"></div>
@@ -471,14 +486,24 @@ function getWeeks(y, m) {
   return w;
 }
 
-const MONTHS = [];
-// 2026년 12월 추가 (새 회기 첫 달)
-const decPrevLast = new Date(YEAR - 1, 12, 0).getDate();
-MONTHS.push({label:'26.12월', month: 12, year: YEAR - 1, last: decPrevLast, weeks: getWeeks(YEAR - 1, 12)});
-for (let m = 1; m <= 12; m++) {
-  const last = new Date(YEAR, m, 0).getDate();
-  MONTHS.push({label:`${m}월`, month: m, year: YEAR, last, weeks: getWeeks(YEAR, m)});
+// 회기 = 전년도 12월 + 해당 연도 1~12월 (13개월)
+function buildSeasonMonths(y) {
+  const months = [];
+  const decPrevLast = new Date(y - 1, 12, 0).getDate();
+  months.push({label:`${String(y - 1).slice(2)}.12월`, month: 12, year: y - 1, last: decPrevLast, weeks: getWeeks(y - 1, 12)});
+  for (let m = 1; m <= 12; m++) {
+    const last = new Date(y, m, 0).getDate();
+    months.push({label:`${m}월`, month: m, year: y, last, weeks: getWeeks(y, m)});
+  }
+  return months;
 }
+const PAST_YEAR = 2026;
+const CUR_MONTHS = buildSeasonMonths(YEAR);       // 2027 회기 (입력·저장 대상)
+const PAST_MONTHS = buildSeasonMonths(PAST_YEAR); // 2026 회기 (조회 전용)
+let MONTHS = CUR_MONTHS; // 지금 화면에 보이는 회기의 달 목록
+let viewYear = YEAR;     // 지금 화면에 보이는 회기
+function isPast() { return viewYear !== YEAR; }
+const PAST_MSG = '👀 지난 회기는 조회만 가능합니다';
 
 // state[ti][mi] = { att: weeks×cats (O/X/''), bible: {day: 'O'|'X'|''} }
 function emptyMonthState(mo) {
@@ -501,8 +526,8 @@ function fixMonthState(ms, mo) {
   }
   return { att, bible: ms.bible || {} };
 }
-function emptyTeacherState() {
-  return MONTHS.map(mo => emptyMonthState(mo));
+function emptyTeacherState(months = CUR_MONTHS) {
+  return months.map(mo => emptyMonthState(mo));
 }
 
 /* ══════ APP STATE ══════ */
@@ -574,9 +599,11 @@ async function pinMatches(plain, stored) {
 let cloudCfg = {enabled: false};
 let syncDebounceTimer = null;
 let isSyncing = false;
+let syncPending = false;
 
 /* ══════ STORAGE ══════ */
 function saveToLocal() {
+  if (isPast()) return; // 2026 조회 중에는 브라우저 저장 안 함
   try {
     // 반드시 현재 부서 참조를 전체 구조에 반영
     teachersByDept[activeDept] = teachers;
@@ -615,7 +642,7 @@ function loadFromLocal() {
     }
 
     function parseStateArr(rawArr) {
-      return rawArr.map(ts => MONTHS.map((mo, mi) => {
+      return rawArr.map(ts => CUR_MONTHS.map((mo, mi) => {
         const s = ts ? ts[mi] : null;
         if (!s) return emptyMonthState(mo);
         if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
@@ -661,11 +688,14 @@ function saveCloudCfg() {
 }
 function scheduleSyncToCloud() {
   clearTimeout(syncDebounceTimer);
+  syncPending = true;
   syncDebounceTimer = setTimeout(() => syncToCloud(), 500);
 }
 // dept 지정 시 해당 부서만, 없으면 양 부서 모두 업로드
 async function syncToCloud(targetDept = null) {
   if (!cloudCfg.enabled) return;
+  if (isPast()) return; // 2026 조회 중에는 자동 동기화 안 함 (2027로 돌아오면 다시 예약)
+  if (!targetDept) syncPending = false;
   if (isSyncing && !targetDept) { scheduleSyncToCloud(); return; }
   if (!targetDept) isSyncing = true;
 
@@ -707,6 +737,7 @@ async function syncToCloud(targetDept = null) {
 }
 async function syncFromCloud() {
   if (!cloudCfg.enabled) return {ok: false, err: '클라우드 동기화가 비활성화 상태입니다'};
+  if (isPast()) return {ok: false, err: PAST_MSG};
   setSyncStatus('☁️ 불러오는 중...', 'syncing');
   try {
     const results = {};
@@ -734,7 +765,7 @@ async function syncFromCloud() {
     }
 
     function parseStateArr(rawArr) {
-      return rawArr.map(ts2 => MONTHS.map((mo, mi) => {
+      return rawArr.map(ts2 => CUR_MONTHS.map((mo, mi) => {
         const s = ts2 ? ts2[mi] : null;
         if (!s) return emptyMonthState(mo);
         if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
@@ -779,8 +810,10 @@ async function syncFromCloud() {
       tsByDept[dept] = cloudTs;
     }
 
-    teachers = teachersByDept[activeDept];
-    state = stateByDept[activeDept];
+    if (!isPast()) {
+      teachers = teachersByDept[activeDept];
+      state = stateByDept[activeDept];
+    }
     localStorage.setItem(LS_KEY, JSON.stringify({
       orgName, adminPw, teachersByDept, stateByDept, lockedMonths, tsByDept
     }));
@@ -796,6 +829,7 @@ async function syncFromCloud() {
   }
 }
 async function cloudSave() {
+  if (isPast()) { showToast(PAST_MSG); return; }
   if (!cloudCfg.enabled) {
     showToast('⚠️ 클라우드 동기화가 설정되지 않았습니다. 관리자에게 문의하세요.'); return;
   }
@@ -808,6 +842,7 @@ async function cloudSave() {
   showToast('✅ 저장되었습니다!');
 }
 async function manualSync() {
+  if (isPast()) { showToast(PAST_MSG); return; }
   if (!cloudCfg.enabled) {
     showToast('⚠️ 클라우드 설정이 필요합니다. ⚙️ 관리 메뉴에서 활성화해주세요.'); return;
   }
@@ -828,6 +863,7 @@ async function manualSync() {
 // 페이지를 닫거나 이탈하기 전 클라우드에 즉시 업로드
 window.addEventListener('beforeunload', () => {
   if (!cloudCfg.enabled) return;
+  if (isPast()) return; // 2026 조회 중에는 닫을 때 저장 안 함
   clearTimeout(syncDebounceTimer);
   teachersByDept[activeDept] = teachers;
   stateByDept[activeDept] = state;
@@ -847,6 +883,7 @@ window.addEventListener('beforeunload', () => {
 });
 /* ══════ EXPORT / IMPORT ══════ */
 function exportData() {
+  if (isPast()) { showToast(PAST_MSG); return; }
   // 현재 부서 데이터를 전체 구조에 반영 후 백업
   teachersByDept[activeDept] = teachers;
   stateByDept[activeDept] = state;
@@ -867,6 +904,7 @@ function exportData() {
   showToast('💾 저장되었습니다!');
 }
 function importData(e) {
+  if (isPast()) { showToast(PAST_MSG); e.target.value = ''; return; }
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
@@ -876,7 +914,7 @@ function importData(e) {
       adminPw = p.adminPw || adminPw;
 
       function parseStateArr(rawArr) {
-        return rawArr.map(ts => MONTHS.map((mo, mi) => {
+        return rawArr.map(ts => CUR_MONTHS.map((mo, mi) => {
           const s = ts ? ts[mi] : null;
           if (!s) return emptyMonthState(mo);
           if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
@@ -945,7 +983,7 @@ function buildLoginTeacherSelect() {
   const grid = document.getElementById('teacher-name-grid');
   const hidden = document.getElementById('teacher-select-login');
   grid.innerHTML = ''; hidden.value = '';
-  teachers.forEach((t, i) => {
+  teachersByDept[activeDept].forEach((t, i) => {
     const btn = document.createElement('button');
     btn.className = 'name-btn';
     btn.textContent = t.name;
@@ -985,6 +1023,7 @@ async function loginTeacher() {
   session = {role:'teacher', teacherIdx:+ti}; activeTeacher = +ti; showApp();
 }
 function logout() {
+  if (isPast()) enterCurrentSeason();
   session = {role:null, teacherIdx:null};
   ['admin-pw-input','teacher-pin-input'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('error'); });
   ['admin-error','teacher-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -1012,11 +1051,101 @@ function showApp() {
   document.getElementById('btn-change-pin').classList.toggle('hidden', isAdmin);
   document.getElementById('btn-cloud-save').classList.toggle('hidden', isAdmin);
   document.getElementById('btn-report').classList.toggle('hidden', !isAdmin);
+  applySeasonUI();
   render();
+}
+
+/* ══════ 회기 선택 (2026 조회 전용) ══════ */
+// 2026 데이터는 화면 표시용으로 메모리에만 보관 — localStorage·2027 행에는 절대 저장하지 않음
+let pastData = null; // { teachersByDept, stateByDept }
+let switchingSeason = false;
+
+async function loadPastSeason() {
+  if (pastData) return;
+  const data = { teachersByDept: {junior: [], senior: []}, stateByDept: {junior: [], senior: []} };
+  for (const dept of ['junior', 'senior']) {
+    const res = await fetch('/supabase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dept, method: 'GET', season: PAST_YEAR })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = await res.json();
+    data.teachersByDept[dept] = (d.teachers || []).map(t => ({name: t.name}));
+    data.stateByDept[dept] = data.teachersByDept[dept].map((_, ti) => {
+      const ts = (d.state || [])[ti];
+      return PAST_MONTHS.map((mo, mi) => {
+        const s = ts ? ts[mi] : null;
+        if (!s) return emptyMonthState(mo);
+        if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
+        return fixMonthState({att: s.att || [], bible: s.bible || {}}, mo);
+      });
+    });
+  }
+  pastData = data;
+}
+
+// 2026 화면에 보여줄 선생님 목록: 관리자는 전체, 선생님은 본인 이름과 같은 기록만
+function setPastView(dept) {
+  const pt = pastData.teachersByDept[dept], ps = pastData.stateByDept[dept];
+  activeTeacher = 0;
+  if (session.role === 'admin') { teachers = pt; state = ps; return; }
+  const myName = teachersByDept[activeDept][session.teacherIdx]?.name;
+  let src = dept, idx = pt.findIndex(t => t.name === myName);
+  if (idx === -1) {
+    // 부서를 옮긴 경우: 다른 부서에서 이름 찾기
+    src = dept === 'junior' ? 'senior' : 'junior';
+    idx = pastData.teachersByDept[src].findIndex(t => t.name === myName);
+  }
+  teachers = idx === -1 ? [] : [pastData.teachersByDept[src][idx]];
+  state = idx === -1 ? [] : [pastData.stateByDept[src][idx]];
+}
+
+function enterCurrentSeason() {
+  viewYear = YEAR; MONTHS = CUR_MONTHS;
+  teachers = teachersByDept[activeDept];
+  state = stateByDept[activeDept];
+  activeTeacher = session.role === 'teacher' ? session.teacherIdx : 0;
+  activeMonth = 0;
+  applySeasonUI();
+  if (syncPending && cloudCfg.enabled && session.role === 'admin') scheduleSyncToCloud();
+}
+
+async function switchSeason(y) {
+  if (y === viewYear || switchingSeason) return;
+  switchingSeason = true;
+  try {
+    if (y === PAST_YEAR) {
+      try { await loadPastSeason(); }
+      catch (e) { console.error('loadPastSeason:', e); showToast('❌ 지난 회기 기록을 불러오지 못했습니다'); return; }
+      // 2027 편집 내용을 먼저 반영하고, 대기 중인 동기화는 전환 전에 마무리
+      teachersByDept[activeDept] = teachers;
+      stateByDept[activeDept] = state;
+      if (syncPending) { clearTimeout(syncDebounceTimer); await syncToCloud(); }
+      viewYear = PAST_YEAR; MONTHS = PAST_MONTHS;
+      setPastView(activeDept);
+      activeMonth = 0;
+      applySeasonUI();
+    } else {
+      enterCurrentSeason();
+    }
+    render();
+  } finally { switchingSeason = false; }
+}
+
+function applySeasonUI() {
+  const past = isPast();
+  document.getElementById('season-2026').className = 't-tab' + (past ? ' active' : '');
+  document.getElementById('season-2027').className = 't-tab' + (past ? '' : ' active');
+  document.getElementById('season-notice').classList.toggle('hidden', !past);
+  ['btn-file-save','btn-file-load','btn-cloud','btn-settings','btn-cloud-save','btn-change-pin']
+    .forEach(id => { document.getElementById(id).disabled = past; });
+  setStatus(past ? '👀 조회 전용' : '💾 자동저장');
 }
 
 /* ══════ PIN CHANGE ══════ */
 function openChangePinModal() {
+  if (isPast()) { showToast(PAST_MSG); return; }
   ['pin-current','pin-new','pin-confirm'].forEach(id => document.getElementById(id).value = '');
   ['pin-current-error','pin-confirm-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
   document.getElementById('pin-modal-sub').textContent = teachers[session.teacherIdx].name+' 선생님의 PIN을 변경합니다';
@@ -1024,6 +1153,7 @@ function openChangePinModal() {
 }
 function closeChangePinModal() { document.getElementById('pin-modal').classList.remove('open'); }
 async function applyChangePin() {
+  if (isPast()) { closeChangePinModal(); showToast(PAST_MSG); return; }
   const cur = document.getElementById('pin-current').value;
   const nw = document.getElementById('pin-new').value.trim();
   const cf = document.getElementById('pin-confirm').value.trim();
@@ -1040,6 +1170,7 @@ async function applyChangePin() {
 
 /* ══════ SETTINGS MODAL ══════ */
 function openSettingsModal() {
+  if (isPast()) { showToast(PAST_MSG); return; }
   modalTeachers = teachers.map(t => ({...t}));
   document.getElementById('modal-org').value = orgName;
   document.getElementById('modal-admin-pw').value = '';
@@ -1107,6 +1238,7 @@ function addTeacherFromModal() {
   setTimeout(() => { const w = document.getElementById('modal-teacher-list'); w.scrollTop = w.scrollHeight; }, 50);
 }
 async function applySettings() {
+  if (isPast()) { closeSettingsModal(); showToast(PAST_MSG); return; }
   const newOrg = document.getElementById('modal-org').value.trim() || orgName;
   const newPw = document.getElementById('modal-admin-pw').value.trim();
   const newTeachers = await Promise.all(
@@ -1219,15 +1351,24 @@ function hasMonthData(ti, mi) {
 
 /* ══════ LOCK HELPERS ══════ */
 function isMonthLocked(mi) {
+  if (isPast()) return false; // 지난 회기는 마감 표시 대신 '조회 전용'으로 표시
   return (lockedMonths[activeDept] || []).includes(mi);
 }
 function toggleMonthLock(dept, mi) {
+  if (isPast()) return;
   if (!lockedMonths[dept]) lockedMonths[dept] = [];
   const idx = lockedMonths[dept].indexOf(mi);
   if (idx === -1) lockedMonths[dept].push(mi);
   else lockedMonths[dept].splice(idx, 1);
   saveToLocal();
   render();
+}
+
+// 수정 불가(지난 회기 또는 마감된 달)면 안내 후 true
+function cantEdit(mi) {
+  if (isPast()) { showToast(PAST_MSG); return true; }
+  if (isMonthLocked(mi)) { showToast('🔒 마감된 달은 수정할 수 없습니다'); return true; }
+  return false;
 }
 
 /* ══════ TEACHER TABS ══════ */
@@ -1276,7 +1417,7 @@ function buildCalendar(ti, mi) {
 
   const hint = document.createElement('div');
   hint.className = 'bible-hint';
-  hint.innerHTML = '날짜 클릭: <span>O</span> → <span style="color:var(--pink)">X</span> → 빈칸 순으로 토글';
+  hint.innerHTML = isPast() ? PAST_MSG : '날짜 클릭: <span>O</span> → <span style="color:var(--pink)">X</span> → 빈칸 순으로 토글';
   wrap.appendChild(hint);
 
   const table = document.createElement('table');
@@ -1321,8 +1462,9 @@ function buildCalendar(ti, mi) {
       checkDiv.textContent = val;
 
       cell.appendChild(numDiv); cell.appendChild(checkDiv);
+      if (isPast()) cell.style.cursor = 'default';
       cell.addEventListener('click', () => {
-        if (isMonthLocked(mi)) { showToast('🔒 마감된 달은 수정할 수 없습니다'); return; }
+        if (cantEdit(mi)) return;
         const cur = ms.bible[String(d)] || '';
         const next = cur===''?'O':cur==='O'?'X':'';
         if (next==='') delete ms.bible[String(d)]; else ms.bible[String(d)] = next;
@@ -1444,24 +1586,24 @@ function buildAttTable(ti, mi) {
   }
   function afterBulk(msg) { refreshATT(); updateStatsPanel(); if(session.role==='admin') buildTeacherTabs(); buildMonthTabs(); saveToLocal(); showToast(msg); }
 
-  bulkBar.querySelector('[data-bulk="O"]').onclick=()=>{if(isMonthLocked(mi)){showToast('🔒 마감된 달은 수정할 수 없습니다');return;}bulkFillAtt(null,'O');afterBulk('✅ 이번 달 전체 O');};
-  bulkBar.querySelector('[data-bulk="X"]').onclick=()=>{if(isMonthLocked(mi)){showToast('🔒 마감된 달은 수정할 수 없습니다');return;}bulkFillAtt(null,'X');afterBulk('✅ 이번 달 전체 X');};
-  bulkBar.querySelector('[data-bulk=""]').onclick=()=>{if(isMonthLocked(mi)){showToast('🔒 마감된 달은 수정할 수 없습니다');return;}bulkFillAtt(null,'');afterBulk('🔄 초기화');};
+  bulkBar.querySelector('[data-bulk="O"]').onclick=()=>{if(cantEdit(mi))return;bulkFillAtt(null,'O');afterBulk('✅ 이번 달 전체 O');};
+  bulkBar.querySelector('[data-bulk="X"]').onclick=()=>{if(cantEdit(mi))return;bulkFillAtt(null,'X');afterBulk('✅ 이번 달 전체 X');};
+  bulkBar.querySelector('[data-bulk=""]').onclick=()=>{if(cantEdit(mi))return;bulkFillAtt(null,'');afterBulk('🔄 초기화');};
 
   wrap.addEventListener('click', e => {
     const btn = e.target.closest('.bbtn[data-wi]'); if(!btn) return;
-    if(isMonthLocked(mi)){showToast('🔒 마감된 달은 수정할 수 없습니다');return;}
+    if(cantEdit(mi))return;
     const wi2=+btn.dataset.wi, val=btn.dataset.val;
     bulkFillAtt(wi2,val); afterBulk(`✅ ${wi2+1}주차 ${val||'초기화'}`);
   });
   wrap.addEventListener('change', e => {
     const sel=e.target; if(!sel.classList.contains('ox-sel')) return;
-    if(isMonthLocked(mi)){
+    if(isPast()||isMonthLocked(mi)){
       // 값 되돌리기
       const wi2=+sel.dataset.wi, ci2=+sel.dataset.ci;
       sel.value=ms.att[wi2][ci2];
       sel.className='ox-sel'+(sel.value==='O'?' val-o':sel.value==='X'?' val-x':'');
-      showToast('🔒 마감된 달은 수정할 수 없습니다'); return;
+      cantEdit(mi); return;
     }
     const wi2=+sel.dataset.wi, ci2=+sel.dataset.ci;
     ms.att[wi2][ci2]=sel.value;
@@ -1469,6 +1611,9 @@ function buildAttTable(ti, mi) {
     CATS.forEach((_,ci)=>{const cell=document.getElementById(`astat-${mi}-${ci}`);if(cell){const pct=calcPct(mo.weeks.map((_,wi)=>ms.att[wi][ci]));cell.textContent=pct!==null?pct+'%':'-';}});
     updateStatsPanel(); if(session.role==='admin') buildTeacherTabs(); buildMonthTabs(); saveToLocal();
   });
+
+  // 지난 회기: 입력 칸과 버튼 모두 비활성화
+  if (isPast()) wrap.querySelectorAll('select, button').forEach(el => { el.disabled = true; });
 
   return wrap;
 }
@@ -1563,20 +1708,34 @@ function updateStatsPanel() {
 
 function adminSwitchDept(dept) {
   if (dept === activeDept) return; // 동일 부서 재클릭 무시
-  // 현재 부서 데이터를 전체 구조에 반영한 뒤 전환
-  teachersByDept[activeDept] = teachers;
-  stateByDept[activeDept] = state;
-  activeDept = dept;
-  teachers = teachersByDept[dept];
-  state = stateByDept[dept];
-  activeTeacher = 0; activeMonth = 0;
+  if (isPast()) {
+    // 지난 회기: 2027 데이터는 건드리지 않고 2026 화면만 전환
+    activeDept = dept;
+    setPastView(dept);
+  } else {
+    // 현재 부서 데이터를 전체 구조에 반영한 뒤 전환
+    teachersByDept[activeDept] = teachers;
+    stateByDept[activeDept] = state;
+    activeDept = dept;
+    teachers = teachersByDept[dept];
+    state = stateByDept[dept];
+    activeTeacher = 0;
+  }
+  activeMonth = 0;
   document.getElementById('admin-dept-junior').className = 'btn btn-sm ' + (dept==='junior' ? 'btn-sky' : 'btn-ghost');
   document.getElementById('admin-dept-senior').className = 'btn btn-sm ' + (dept==='senior' ? 'btn-gold' : 'btn-ghost');
   render();
 }
 /* ══════ RENDER ══════ */
 function render() {
+  const noRecord = isPast() && !teachers.length;
+  document.getElementById('month-tabs-wrap').classList.toggle('hidden', noRecord);
+  document.getElementById('stats-panel').classList.toggle('hidden', noRecord);
   if (session.role==='admin') buildTeacherTabs();
+  if (noRecord) {
+    document.getElementById('main-card').innerHTML = '<div class="main-card"><div class="no-record">📭 지난 회기 기록이 없습니다</div></div>';
+    return;
+  }
   buildMonthTabs(); buildMainCard(); updateStatsPanel();
 }
 
@@ -1610,7 +1769,7 @@ document.getElementById('login-screen').classList.remove('hidden');
     }
 
     function parseStateArr(rawArr) {
-      return rawArr.map(ts2 => MONTHS.map((mo, mi) => {
+      return rawArr.map(ts2 => CUR_MONTHS.map((mo, mi) => {
         const s = ts2 ? ts2[mi] : null;
         if (!s) return emptyMonthState(mo);
         if (Array.isArray(s)) return fixMonthState({att: s, bible: {}}, mo);
@@ -1645,8 +1804,10 @@ document.getElementById('login-screen').classList.remove('hidden');
     }
 
     if (updated) {
-      teachers = teachersByDept[activeDept];
-      state = stateByDept[activeDept];
+      if (!isPast()) {
+        teachers = teachersByDept[activeDept];
+        state = stateByDept[activeDept];
+      }
       localStorage.setItem(LS_KEY, JSON.stringify({orgName, adminPw, teachersByDept, stateByDept, lockedMonths, tsByDept}));
       saveCloudCfg();
       buildLoginTeacherSelect();
@@ -1692,8 +1853,9 @@ function exportExcel() {
   const toMi = +document.getElementById('rpt-to').value;
   if (fromMi > toMi) { showToast('⚠️ 시작 월이 종료 월보다 클 수 없습니다'); return; }
 
-  const deptTeachers = teachersByDept[rptDept];
-  const deptState = stateByDept[rptDept];
+  const src = isPast() ? pastData : {teachersByDept, stateByDept};
+  const deptTeachers = src.teachersByDept[rptDept];
+  const deptState = src.stateByDept[rptDept];
   const deptLabel = DEPTS[rptDept].label.replace(/[🌱✝️]/g,'').trim();
   const selectedMonths = MONTHS.slice(fromMi, toMi + 1);
   const fromLabel = MONTHS[fromMi].label;
@@ -1775,7 +1937,7 @@ function exportExcel() {
   merges.push({ s: { r: 0, c: col }, e: { r: 0, c: col + ALL_CATS.length - 1 } });
   ws['!merges'] = merges;
 
-  const titleText = `${YEAR} ${deptLabel} 교사 체크리스트 (${fromLabel}~${toLabel})`;
+  const titleText = `${viewYear} ${deptLabel} 교사 체크리스트 (${fromLabel}~${toLabel})`;
   XLSX.utils.book_append_sheet(wb, ws, deptLabel);
   XLSX.writeFile(wb, `${titleText}.xlsx`);
   closeReportModal();
@@ -1788,8 +1950,9 @@ function printReport() {
   const toMi = +document.getElementById('rpt-to').value;
   if (fromMi > toMi) { showToast('⚠️ 시작 월이 종료 월보다 클 수 없습니다'); return; }
 
-  const deptTeachers = teachersByDept[rptDept];
-  const deptState = stateByDept[rptDept];
+  const src = isPast() ? pastData : {teachersByDept, stateByDept};
+  const deptTeachers = src.teachersByDept[rptDept];
+  const deptState = src.stateByDept[rptDept];
   const deptLabel = DEPTS[rptDept].label;
   const selectedMonths = MONTHS.slice(fromMi, toMi + 1);
   const fromLabel = MONTHS[fromMi].label;
@@ -1878,7 +2041,7 @@ function printReport() {
   });
   tbody += '</tbody>';
 
-  const titleText = `${YEAR} ${deptLabel.replace(/[🌱✝️]/g,'').trim()} 교사 체크리스트 (${fromLabel}~${toLabel})`;
+  const titleText = `${viewYear} ${deptLabel.replace(/[🌱✝️]/g,'').trim()} 교사 체크리스트 (${fromLabel}~${toLabel})`;
   const html = `<div class="rpt-title">${titleText}</div><table class="rpt-table">${thead}${tbody}</table>`;
 
   document.getElementById('report-print-area').innerHTML = html;

@@ -4,6 +4,9 @@ const SUPABASE_KEY = 'sb_publishable_GkszbBMYO7SQYedNBw0-7Q_Jv90-DUH';
 // 내년(2027)용 사이트 전용 저장 공간. 올해 운영 데이터(junior/senior)와 분리됨
 const ROW_SUFFIX = '_2027';
 
+// 지난 회기(2026): junior/senior 원본 행. 읽기(GET)만 허용, 쓰기는 서버에서 거부
+const PAST_SEASON = '2026';
+
 export async function onRequestPost(context) {
   let body;
   try {
@@ -12,11 +15,20 @@ export async function onRequestPost(context) {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
   }
 
-  const { dept, method, body: payload } = body;
+  const { dept, method, body: payload, season } = body;
 
   if (!dept || !['junior', 'senior'].includes(dept)) {
     return new Response(JSON.stringify({ error: 'Invalid dept' }), { status: 400 });
   }
+
+  const isPast = season !== undefined && season !== null && String(season) === PAST_SEASON;
+  if (season !== undefined && season !== null && !isPast) {
+    return new Response(JSON.stringify({ error: 'Invalid season' }), { status: 400 });
+  }
+  if (isPast && method !== 'GET') {
+    return new Response(JSON.stringify({ error: '지난 회기는 조회만 가능합니다' }), { status: 403 });
+  }
+  const rowId = isPast ? dept : `${dept}${ROW_SUFFIX}`;
 
   const headers = {
     'Content-Type': 'application/json',
@@ -26,12 +38,20 @@ export async function onRequestPost(context) {
 
   try {
     if (method === 'GET') {
-      const res = await fetch(`${SUPABASE_URL}/checklist_data?id=eq.${dept}${ROW_SUFFIX}&select=*`, { headers });
+      const res = await fetch(`${SUPABASE_URL}/checklist_data?id=eq.${rowId}&select=*`, { headers });
       if (!res.ok) throw new Error(`Supabase GET failed: ${res.status}`);
       const data = await res.json();
-      return new Response(JSON.stringify(data[0] || {}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      let row = data[0] || {};
+      if (isPast) {
+        // 조회에 필요한 이름·기록만 전달 (비밀번호·PIN 제외)
+        row = {
+          teachers: (row.teachers || []).map(t => ({ name: t.name })),
+          state: row.state || [],
+        };
+      }
+      return new Response(JSON.stringify(row), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
-    } else if (method === 'PUT') {
+    } else if (method === 'PUT' && !isPast) {
       const res = await fetch(`${SUPABASE_URL}/checklist_data?id=eq.${dept}${ROW_SUFFIX}`, {
         method: 'PATCH',
         headers: { ...headers, 'Prefer': 'return=minimal' },
