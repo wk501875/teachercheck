@@ -389,7 +389,7 @@
     <div class="cloud-setup-box">
       <h3>☁️ 클라우드 동기화 (Supabase)</h3>
       <p>다른 기기에서도 같은 데이터를 공유하려면 Supabase 연동을 활성화하세요.<br>
-      API Key는 Netlify 환경변수에 설정되어 있어 별도 입력이 불필요합니다.</p>
+      Supabase 연결 정보는 서버 함수(<code>functions/supabase.js</code>)에 들어 있어 별도 입력이 불필요합니다.</p>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
         <label style="font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px">
           <input type="checkbox" id="modal-supabase-enabled" style="width:17px;height:17px;cursor:pointer" />
@@ -399,10 +399,8 @@
       <div class="cloud-hint">
         💡 <b>최초 설정 방법 (관리자 1회)</b><br>
         ① <a href="https://supabase.com" target="_blank" style="color:var(--sky)">supabase.com</a> 무료 가입 후 프로젝트 생성<br>
-        ② <b>Project Settings → API</b>에서 <b>Project URL</b>과 <b>anon public key</b> 복사<br>
-        ③ Netlify 사이트 설정 → <b>Environment variables</b>에서 아래 두 변수 등록:<br>
-        &nbsp;&nbsp;&nbsp;&nbsp;<code style="background:#eee;padding:1px 4px;border-radius:4px">SUPABASE_URL</code> = <code style="background:#eee;padding:1px 4px;border-radius:4px">https://xxxx.supabase.co</code><br>
-        &nbsp;&nbsp;&nbsp;&nbsp;<code style="background:#eee;padding:1px 4px;border-radius:4px">SUPABASE_ANON_KEY</code> = <code style="background:#eee;padding:1px 4px;border-radius:4px">eyJh...</code><br>
+        ② <b>Project Settings → API</b>에서 <b>Project URL</b>과 <b>publishable key</b> 복사<br>
+        ③ 저장소의 <code style="background:#eee;padding:1px 4px;border-radius:4px">functions/supabase.js</code> 파일 맨 위 <code style="background:#eee;padding:1px 4px;border-radius:4px">SUPABASE_URL</code>, <code style="background:#eee;padding:1px 4px;border-radius:4px">SUPABASE_KEY</code> 값에 입력 → main 브랜치에 반영되면 Cloudflare Pages에 자동 배포<br>
         ④ Supabase <b>SQL Editor</b>에서 아래 쿼리 실행:<br>
         <code style="background:#eee;padding:4px 6px;border-radius:4px;display:block;margin-top:4px;font-size:10px;line-height:1.6">
         CREATE TABLE checklist_data (<br>
@@ -413,7 +411,7 @@
         &nbsp;&nbsp;state JSONB,<br>
         &nbsp;&nbsp;updated_at TIMESTAMPTZ DEFAULT now()<br>
         );<br>
-        INSERT INTO checklist_data (id) VALUES ('junior'), ('senior')<br>
+        INSERT INTO checklist_data (id) VALUES ('junior_2027'), ('senior_2027')<br>
         ON CONFLICT DO NOTHING;
         </code><br>
         ⑤ 위 체크박스 활성화 후 <b>✅ 저장</b>
@@ -454,11 +452,11 @@
 
 <script>
 /* ══════ CONSTANTS ══════ */
-const YEAR = 2026;
+const YEAR = 2027;
 const CATS = ['교회학교','주일말씀','수요말씀','구역모임','청년회교제'];
 const CAT_COLORS = ['#4fa8d5','#f5a623','#8b6fbf','#5bb974','#e8728a'];
-const MONTH_COLORS = ['#e67e22','#e8728a','#8b6fbf','#4fa8d5','#f5a623','#5bb974','#2980b9','#16a085','#8e44ad','#c0392b','#27ae60','#d35400'];
-const LS_KEY = 'checklist_2026_v4';
+const MONTH_COLORS = ['#e67e22','#e8728a','#8b6fbf','#4fa8d5','#f5a623','#5bb974','#2980b9','#16a085','#8e44ad','#c0392b','#27ae60','#d35400','#b8860b'];
+const LS_KEY = 'checklist_2027_v1';
 const LS_CLOUD_KEY = 'checklist_cloud_cfg';
 const DAY_NAMES = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
@@ -474,9 +472,9 @@ function getWeeks(y, m) {
 }
 
 const MONTHS = [];
-// 2025년 12월 추가
-const dec2025Last = new Date(2025, 12, 0).getDate();
-MONTHS.push({label:'25.12월', month: 12, year: 2025, last: dec2025Last, weeks: getWeeks(2025, 12)});
+// 2026년 12월 추가 (새 회기 첫 달)
+const decPrevLast = new Date(YEAR - 1, 12, 0).getDate();
+MONTHS.push({label:'26.12월', month: 12, year: YEAR - 1, last: decPrevLast, weeks: getWeeks(YEAR - 1, 12)});
 for (let m = 1; m <= 12; m++) {
   const last = new Date(YEAR, m, 0).getDate();
   MONTHS.push({label:`${m}월`, month: m, year: YEAR, last, weeks: getWeeks(YEAR, m)});
