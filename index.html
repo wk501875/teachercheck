@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>교사 체크리스트</title>
+<!-- 홈 화면에 추가 (서비스 워커 없음: 수정 사항이 바로 반영되도록) -->
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#4fa8d5">
+<meta name="application-name" content="교사 체크리스트">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="교사 체크리스트">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
   :root {
@@ -73,6 +84,8 @@
   /* ── Top Bar ── */
   .top-bar{background:var(--card);border-radius:16px;box-shadow:0 2px 12px rgba(79,168,213,.10);padding:8px 12px;margin-bottom:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .top-bar-left{flex:1;min-width:0;}
+  /* 휴대폰: 이름·저장 상태를 한 줄로 두고 버튼은 아래 줄로 */
+  @media(max-width:520px){ .top-bar-left{flex-basis:100%;} }
   .user-badge{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;}
   .role{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:700;}
   .role-admin{background:#fff3cd;color:#856404;}
@@ -99,6 +112,19 @@
   /* ── Server save error ── */
   .save-error{display:flex;align-items:center;gap:10px;background:#fdf0f3;border:2px solid var(--pink);color:var(--pink);border-radius:14px;padding:10px 14px;font-size:12px;font-weight:700;margin-bottom:14px;}
   .save-error span{flex:1;line-height:1.6;}
+
+  /* ── 미입력 현황 ── */
+  .miss-weeks{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
+  .miss-weeks .m-tab{padding:5px 11px;font-size:11px;}
+  .miss-head{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;line-height:1.5;}
+  .miss-section{background:var(--bg);border-radius:14px;padding:12px 14px;margin-bottom:10px;}
+  .miss-title{font-size:13px;font-weight:900;margin-bottom:8px;}
+  .miss-title b{color:var(--pink);margin-left:2px;}
+  .miss-chips{display:flex;flex-wrap:wrap;gap:5px;}
+  .miss-chip{padding:4px 11px;border-radius:999px;background:white;border:2px solid var(--pink);color:var(--pink);font-size:12px;font-weight:700;}
+  .miss-ok{font-size:12px;font-weight:700;color:var(--green);}
+  .miss-note{font-size:11px;font-weight:700;color:var(--gold);background:#fff8e6;border-radius:10px;padding:8px 10px;margin-bottom:10px;}
+  .miss-loading{text-align:center;padding:24px 0;color:var(--muted);font-size:13px;font-weight:700;}
 
   /* ── Season bar ── */
   .season-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
@@ -153,6 +179,9 @@
   .day-num.sat{color:var(--blue);}
   .day-check{font-size:13px;font-weight:900;color:var(--green);line-height:1;text-align:center;margin-top:2px;}
   .day-cell.checked-x .day-check{color:var(--pink);}
+  /* 오늘 날짜 */
+  .day-cell.today{border:2px solid var(--sky);box-shadow:0 0 0 2px var(--sky-light);}
+  .day-cell.today .day-num{display:inline-block;background:var(--sky);color:white;border-radius:999px;padding:1px 4px;}
 
   /* ── Bible reading legend ── */
   .bible-hint{font-size:10px;color:var(--muted);margin-bottom:8px;}
@@ -163,12 +192,23 @@
   .att-table th{text-align:center;padding:5px 3px;font-weight:700;border-bottom:2px solid var(--sky);background:var(--sky-light);color:var(--sky);white-space:nowrap;font-size:10px;}
   .att-table th.week-col{background:#f0f4f8;color:var(--muted);font-weight:500;}
   .att-table td{text-align:center;padding:3px 2px;border-bottom:1px solid var(--border);vertical-align:middle;}
-  .att-table td.week-label{font-size:10px;color:var(--muted);font-weight:600;white-space:nowrap;}
+  .att-table td.week-label{font-size:10px;color:var(--muted);font-weight:600;white-space:nowrap;line-height:1.25;padding:3px 3px;}
+  .att-table td.week-label .wk-range{display:block;font-size:9px;font-weight:500;letter-spacing:-.3px;}
+  /* 이번 주 */
+  .att-table tr.this-week td{background:#fff8e6;}
+  .att-table tr.this-week td.week-label{color:var(--gold);font-weight:900;box-shadow:inset 3px 0 0 var(--gold);}
   .att-table tr.stat-row td{background:var(--sky-light);font-weight:700;font-size:10px;color:var(--sky);border-top:2px solid var(--sky);border-bottom:none;padding:6px 2px;}
 
   .ox-sel{appearance:none;-webkit-appearance:none;border:1.5px solid var(--border);border-radius:6px;padding:2px 1px;font-family:inherit;font-size:11px;font-weight:700;width:38px;text-align:center;cursor:pointer;background:white;color:var(--muted);transition:all .12s;}
   .ox-sel.val-o{border-color:var(--green);background:#edfaf1;color:var(--green);}
   .ox-sel.val-x{border-color:var(--pink);background:#fdf0f3;color:var(--pink);}
+  /* 휴대폰: 주차 날짜가 들어가도 표가 화면 안에 들어오도록 */
+  @media(max-width:520px){
+    .att-table td{padding:3px 1px;}
+    .att-table td.week-label{padding:3px 2px;}
+    .ox-sel{width:32px;}
+    .att-table th{white-space:normal;word-break:break-all;line-height:1.2;padding:4px 1px;}
+  }
 
   /* ── Bulk bar ── */
   .bulk-bar{display:flex;align-items:center;gap:5px;padding:7px 12px;border-top:1px solid var(--border);background:#fafcfe;flex-wrap:wrap;}
@@ -323,6 +363,7 @@
     <button class="btn btn-ghost btn-sm" id="btn-cloud" onclick="manualSync()" title="클라우드 수동 동기화">☁️ 동기화</button>
     <button class="btn btn-ghost btn-sm" id="btn-settings" onclick="openSettingsModal()">⚙️ 관리</button>
     <button class="btn btn-ghost btn-sm" id="btn-report" onclick="openReportModal()">📊 보고서</button>
+    <button class="btn btn-ghost btn-sm" id="btn-missing" onclick="openMissingModal()">📋 미입력 현황</button>
     <button class="btn btn-sky btn-sm" id="btn-cloud-save" onclick="cloudSave()">☁️ 저장</button>
     <button class="btn btn-ghost btn-sm" id="btn-change-pin" onclick="openChangePinModal()">🔑 PIN 변경</button>
     <button class="btn btn-pink btn-sm" onclick="logout()">로그아웃</button>
@@ -487,7 +528,12 @@ function getWeeks(y, m) {
   // 주차 수: Math.ceil((firstDay + lastDate) / 7)
   const numWeeks = Math.ceil((firstDay + lastDate) / 7);
   const w = [];
-  for (let n = 1; n <= numWeeks; n++) { w.push({label:`${n}주`}); }
+  for (let n = 1; n <= numWeeks; n++) {
+    // 달력의 n번째 줄에 들어 있는 이 달의 날짜 (일~토 한 줄)
+    const start = Math.max(1, (n - 1) * 7 + 1 - firstDay);
+    const end = Math.min(lastDate, n * 7 - firstDay);
+    w.push({label:`${n}주`, start, end});
+  }
   return w;
 }
 
@@ -508,6 +554,24 @@ const PAST_MONTHS = buildSeasonMonths(PAST_YEAR); // 2026 회기 (조회 전용)
 let MONTHS = CUR_MONTHS; // 지금 화면에 보이는 회기의 달 목록
 let viewYear = YEAR;     // 지금 화면에 보이는 회기
 function isPast() { return viewYear !== YEAR; }
+// 오늘이 속한 달의 인덱스 (회기 시작 전이면 첫 달, 끝났으면 마지막 달)
+function todayMonthIndex(months = MONTHS) {
+  const now = new Date();
+  const idx = months.findIndex(mo => mo.year === now.getFullYear() && mo.month === now.getMonth() + 1);
+  if (idx !== -1) return idx;
+  const first = months[0];
+  return now < new Date(first.year, first.month - 1, 1) ? 0 : months.length - 1;
+}
+// 오늘이 이 달의 몇 번째 주(달력 줄)인지, 이 달이 아니면 -1
+function todayWeekIndex(mo) {
+  const now = new Date();
+  if (mo.year !== now.getFullYear() || mo.month !== now.getMonth() + 1) return -1;
+  const firstDay = new Date(mo.year, mo.month - 1, 1).getDay();
+  return Math.floor((firstDay + now.getDate() - 1) / 7);
+}
+function weekRangeText(mo, wk) {
+  return wk.start === wk.end ? `${mo.month}/${wk.start}` : `${mo.month}/${wk.start}~${mo.month}/${wk.end}`;
+}
 const PAST_MSG = '👀 지난 회기는 조회만 가능합니다';
 
 // state[ti][mi] = { att: weeks×cats (O/X/''), bible: {day: 'O'|'X'|''} }
@@ -1212,8 +1276,10 @@ function showApp() {
   document.getElementById('btn-change-pin').classList.toggle('hidden', isAdmin);
   document.getElementById('btn-cloud-save').classList.toggle('hidden', isAdmin);
   document.getElementById('btn-report').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btn-missing').classList.toggle('hidden', !isAdmin);
+  activeMonth = todayMonthIndex(); // 로그인하면 이번 달 열기
   applySeasonUI();
-  render();
+  render({center: true});
 }
 
 /* ══════ 회기 선택 (2026 조회 전용) ══════ */
@@ -1267,7 +1333,7 @@ function enterCurrentSeason() {
   teachers = teachersByDept[activeDept];
   state = stateByDept[activeDept];
   activeTeacher = session.role === 'teacher' ? session.teacherIdx : 0;
-  activeMonth = 0;
+  activeMonth = todayMonthIndex();
   applySeasonUI();
   if (hasPending()) scheduleServerSave();
 }
@@ -1285,12 +1351,12 @@ async function switchSeason(y) {
       await flushServerSaves(); // 대기 중인 2027 저장을 먼저 마무리
       viewYear = PAST_YEAR; MONTHS = PAST_MONTHS;
       setPastView(activeDept);
-      activeMonth = 0;
+      activeMonth = todayMonthIndex();
       applySeasonUI();
     } else {
       enterCurrentSeason();
     }
-    render();
+    render({center: true});
   } finally { switchingSeason = false; }
 }
 
@@ -1299,7 +1365,7 @@ function applySeasonUI() {
   document.getElementById('season-2026').className = 't-tab' + (past ? ' active' : '');
   document.getElementById('season-2027').className = 't-tab' + (past ? '' : ' active');
   document.getElementById('season-notice').classList.toggle('hidden', !past);
-  ['btn-file-save','btn-file-load','btn-cloud','btn-settings','btn-cloud-save','btn-change-pin']
+  ['btn-file-save','btn-file-load','btn-cloud','btn-settings','btn-cloud-save','btn-change-pin','btn-missing']
     .forEach(id => { document.getElementById(id).disabled = past; });
   setStatus(past ? '👀 조회 전용' : '💾 자동저장');
 }
@@ -1529,25 +1595,40 @@ function cantEdit(mi) {
   return false;
 }
 
+/* ══════ TAB SCROLL ══════ */
+// 활성 탭을 탭 막대 가운데로 가로 이동 (scrollIntoView는 세로 스크롤까지 움직여서 사용하지 않음)
+function centerActiveTab(scroller, selector) {
+  const a = scroller.querySelector(selector); if (!a) return;
+  const sr = scroller.getBoundingClientRect(), ar = a.getBoundingClientRect();
+  const left = scroller.scrollLeft + (ar.left + ar.width / 2) - (sr.left + sr.width / 2);
+  scroller.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+}
+
 /* ══════ TEACHER TABS ══════ */
-function buildTeacherTabs() {
+// center=true: 탭을 직접 눌렀을 때·화면을 처음 열 때만 가로 위치 맞춤
+function buildTeacherTabs(center = false) {
   document.getElementById('org-name-display').textContent = orgName;
   document.getElementById('teacher-count-badge').textContent = teachers.length+'명';
-  const wrap = document.getElementById('teacher-tabs'); wrap.innerHTML = '';
+  const wrap = document.getElementById('teacher-tabs');
+  const scroller = wrap.parentElement, keepLeft = scroller.scrollLeft;
+  wrap.innerHTML = '';
   teachers.forEach((t, ti) => {
     const hasDat = hasMonthData(ti, activeMonth), isActive = ti===activeTeacher;
     const btn = document.createElement('button');
     btn.className = 't-tab'+(isActive?' active':(hasDat?' has-data':''));
     btn.textContent = t.name+(hasDat&&!isActive?' ✓':'');
-    btn.onclick = () => { activeTeacher = ti; render(); };
+    btn.onclick = () => { activeTeacher = ti; render({center: true}); };
     wrap.appendChild(btn);
   });
-  setTimeout(() => { const a=wrap.querySelector('.t-tab.active'); if(a) a.scrollIntoView({inline:'center',behavior:'smooth'}); }, 50);
+  scroller.scrollLeft = keepLeft; // 다시 그려도 가로 위치 유지
+  if (center) centerActiveTab(scroller, '.t-tab.active');
 }
 
 /* ══════ MONTH TABS ══════ */
-function buildMonthTabs() {
-  const wrap = document.getElementById('month-tabs'); wrap.innerHTML = '';
+function buildMonthTabs(center = false) {
+  const wrap = document.getElementById('month-tabs');
+  const scroller = wrap.parentElement, keepLeft = scroller.scrollLeft;
+  wrap.innerHTML = '';
   MONTHS.forEach((mo, mi) => {
     const hasDat = hasMonthData(activeTeacher, mi), isActive = mi===activeMonth;
     const locked = isMonthLocked(mi);
@@ -1558,10 +1639,11 @@ function buildMonthTabs() {
     if (locked) cls += ' locked';
     btn.className = cls;
     btn.textContent = mo.label + (locked ? ' 🔒' : (hasDat&&!isActive?' ✓':''));
-    btn.onclick = () => { activeMonth = mi; render(); };
+    btn.onclick = () => { activeMonth = mi; render({center: true}); };
     wrap.appendChild(btn);
   });
-  setTimeout(() => { const a=wrap.querySelector('.m-tab.active'); if(a) a.scrollIntoView({inline:'center',behavior:'smooth'}); }, 50);
+  scroller.scrollLeft = keepLeft; // 다시 그려도 가로 위치 유지
+  if (center) centerActiveTab(scroller, '.m-tab.active');
 }
 
 /* ══════ CALENDAR (left col) ══════ */
@@ -1570,6 +1652,8 @@ function buildCalendar(ti, mi) {
   const ms = state[ti][mi];
   const firstDay = new Date(mo.year || YEAR, mo.month-1, 1).getDay();
   const lastDate = mo.last;
+  const now = new Date();
+  const todayDay = (mo.year === now.getFullYear() && mo.month === now.getMonth() + 1) ? now.getDate() : -1;
 
   const wrap = document.createElement('div');
 
@@ -1608,7 +1692,8 @@ function buildCalendar(ti, mi) {
       const d = actualDay;
       const val = ms.bible[String(d)] || '';
       const cell = document.createElement('div');
-      cell.className = 'day-cell'+(val==='O'?' checked':val==='X'?' checked-x':'');
+      const todayCls = d === todayDay ? ' today' : '';
+      cell.className = 'day-cell'+(val==='O'?' checked':val==='X'?' checked-x':'')+todayCls;
       cell.dataset.day = d;
 
       const numDiv = document.createElement('div');
@@ -1626,7 +1711,7 @@ function buildCalendar(ti, mi) {
         const cur = ms.bible[String(d)] || '';
         const next = cur===''?'O':cur==='O'?'X':'';
         if (next==='') delete ms.bible[String(d)]; else ms.bible[String(d)] = next;
-        cell.className = 'day-cell'+(next==='O'?' checked':next==='X'?' checked-x':'');
+        cell.className = 'day-cell'+(next==='O'?' checked':next==='X'?' checked-x':'')+todayCls;
         checkDiv.textContent = next;
         buildMonthTabs(); if(session.role==='admin') buildTeacherTabs();
         updateStatsPanel();
@@ -1696,10 +1781,12 @@ function buildAttTable(ti, mi) {
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
+  const thisWeek = todayWeekIndex(mo);
 
   mo.weeks.forEach((wk, wi) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="week-label">${wk.label}</td>`+
+    if (wi === thisWeek) tr.className = 'this-week';
+    tr.innerHTML = `<td class="week-label">${wk.label}<span class="wk-range">(${weekRangeText(mo, wk)})</span></td>`+
       CATS.map((_,ci) => {
         const val = ms.att[wi][ci];
         const cls = val==='O'?' val-o':val==='X'?' val-x':'';
@@ -1881,22 +1968,25 @@ function adminSwitchDept(dept) {
     state = stateByDept[dept];
     activeTeacher = 0;
   }
-  activeMonth = 0;
   document.getElementById('admin-dept-junior').className = 'btn btn-sm ' + (dept==='junior' ? 'btn-sky' : 'btn-ghost');
   document.getElementById('admin-dept-senior').className = 'btn btn-sm ' + (dept==='senior' ? 'btn-gold' : 'btn-ghost');
-  render();
+  render({center: true});
 }
 /* ══════ RENDER ══════ */
-function render() {
+// opts.center: 탭 가로 위치 맞춤 (탭을 눌렀을 때·화면을 처음 열 때만)
+function render(opts = {}) {
+  const center = !!opts.center;
+  const y = window.scrollY; // 다시 그려도 세로 스크롤 위치는 그대로
   const noRecord = isPast() && !teachers.length;
   document.getElementById('month-tabs-wrap').classList.toggle('hidden', noRecord);
   document.getElementById('stats-panel').classList.toggle('hidden', noRecord);
-  if (session.role==='admin') buildTeacherTabs();
+  if (session.role==='admin') buildTeacherTabs(center);
   if (noRecord) {
     document.getElementById('main-card').innerHTML = '<div class="main-card"><div class="no-record">📭 지난 회기 기록이 없습니다</div></div>';
-    return;
+  } else {
+    buildMonthTabs(center); buildMainCard(); updateStatsPanel();
   }
-  buildMonthTabs(); buildMainCard(); updateStatsPanel();
+  if (window.scrollY !== y) window.scrollTo(window.scrollX, y);
 }
 
 /* ══════ INIT ══════ */
@@ -1930,6 +2020,116 @@ document.getElementById('login-screen').classList.remove('hidden');
     if (hasPending()) scheduleServerSave(5000);
   }
 })();
+
+/* ══════ 미입력 현황 (관리자) ══════ */
+let missDept = 'senior', missMonth = 0, missWeek = 0, missLoading = false, missNote = '';
+
+async function openMissingModal() {
+  if (isPast()) { showToast(PAST_MSG); return; }
+  missDept = activeDept;
+  missMonth = todayMonthIndex(CUR_MONTHS);
+  const tw = todayWeekIndex(CUR_MONTHS[missMonth]);
+  missWeek = tw === -1 ? 0 : tw;
+  document.getElementById('miss-month').innerHTML =
+    CUR_MONTHS.map((mo, mi) => `<option value="${mi}">${mo.year}년 ${mo.month}월</option>`).join('');
+  document.getElementById('miss-month').value = missMonth;
+  renderMissDept(); renderMissWeeks();
+  document.getElementById('missing-modal').classList.add('open');
+
+  // 다른 선생님들이 방금 입력한 내용까지 반영하려고 서버에서 최신 기록을 불러옴
+  missLoading = true; missNote = '';
+  renderMissing();
+  try {
+    await flushServerSaves();
+    await reloadFromServer();
+    refreshScreen();
+  } catch (e) {
+    console.error('openMissingModal:', e);
+    missNote = '⚠️ 최신 기록을 불러오지 못해 이 기기에 있는 기록으로 표시합니다.';
+  }
+  missLoading = false;
+  renderMissing();
+}
+function closeMissingModal() { document.getElementById('missing-modal').classList.remove('open'); }
+function missSetDept(dept) { missDept = dept; renderMissDept(); renderMissing(); }
+function missSetMonth(mi) {
+  missMonth = mi;
+  const tw = todayWeekIndex(CUR_MONTHS[mi]);
+  missWeek = tw === -1 ? 0 : tw;
+  renderMissWeeks(); renderMissing();
+}
+function missSetWeek(wi) { missWeek = wi; renderMissWeeks(); renderMissing(); }
+function renderMissDept() {
+  document.getElementById('miss-dept-junior').className = 'btn btn-sm ' + (missDept==='junior' ? 'btn-sky' : 'btn-ghost');
+  document.getElementById('miss-dept-senior').className = 'btn btn-sm ' + (missDept==='senior' ? 'btn-gold' : 'btn-ghost');
+}
+function renderMissWeeks() {
+  const mo = CUR_MONTHS[missMonth];
+  const tw = todayWeekIndex(mo);
+  document.getElementById('miss-weeks').innerHTML = mo.weeks.map((wk, wi) =>
+    `<button class="m-tab${wi===missWeek?' active':''}" onclick="missSetWeek(${wi})">${wk.label} (${weekRangeText(mo, wk)})${wi===tw?' · 이번 주':''}</button>`
+  ).join('');
+}
+// 그 주에 참석현황을 하나도 입력하지 않은 선생님 / 성경읽기를 하루도 입력하지 않은 선생님
+function computeMissing() {
+  const mo = CUR_MONTHS[missMonth], wk = mo.weeks[missWeek];
+  const list = teachersByDept[missDept] || [], st = stateByDept[missDept] || [];
+  const att = [], bible = [];
+  list.forEach((t, ti) => {
+    const ms = st[ti] && st[ti][missMonth];
+    const row = (ms && ms.att[missWeek]) || [];
+    if (!CATS.some((_, ci) => row[ci])) att.push(t.name);
+    let read = false;
+    for (let d = wk.start; d <= wk.end; d++) if (ms && ms.bible[String(d)]) { read = true; break; }
+    if (!read) bible.push(t.name);
+  });
+  return { mo, wk, total: list.length, att, bible };
+}
+function missTitle(m) {
+  return `${DEPTS[missDept].label.replace(/[🌱✝️]/g,'').trim()} · ${m.mo.year}년 ${m.mo.month}월 ${m.wk.label} (${weekRangeText(m.mo, m.wk)})`;
+}
+function renderMissing() {
+  const el = document.getElementById('miss-result');
+  document.getElementById('miss-copy-btn').disabled = missLoading;
+  if (missLoading) { el.innerHTML = '<div class="miss-loading">☁️ 최신 기록을 불러오는 중...</div>'; return; }
+  const m = computeMissing();
+  const section = (icon, title, names) => `
+    <div class="miss-section">
+      <div class="miss-title">${icon} ${title} <b>${names.length}명</b></div>
+      ${names.length
+        ? `<div class="miss-chips">${names.map(n => `<span class="miss-chip">${n}</span>`).join('')}</div>`
+        : '<div class="miss-ok">✅ 모두 입력했습니다</div>'}
+    </div>`;
+  el.innerHTML = (missNote ? `<div class="miss-note">${missNote}</div>` : '') +
+    `<div class="miss-head">${missTitle(m)} · 전체 ${m.total}명</div>` +
+    section('🙋', '참석현황 미입력', m.att) +
+    section('📖', '성경읽기 미입력', m.bible);
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  // 예전 브라우저용
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed'; ta.style.top = '-1000px';
+  document.body.appendChild(ta);
+  ta.select(); ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+  return ok;
+}
+async function copyMissing() {
+  if (missLoading) return;
+  const m = computeMissing();
+  const text = [
+    `[${missTitle(m)}] 미입력 현황`,
+    `■ 참석현황 미입력 (${m.att.length}명)`,
+    m.att.length ? m.att.join(', ') : '모두 입력했습니다',
+    `■ 성경읽기 미입력 (${m.bible.length}명)`,
+    m.bible.length ? m.bible.join(', ') : '모두 입력했습니다',
+  ].join('\n');
+  showToast(await copyText(text) ? '📋 복사했습니다! 카톡에 붙여넣으세요' : '⚠️ 복사하지 못했습니다');
+}
 
 /* ══════ 보고서 ══════ */
 let rptDept = 'senior';
@@ -2190,6 +2390,33 @@ function printReport() {
   </div>
 </div>
 
+<!-- ══════ 미입력 현황 모달 (관리자) ══════ -->
+<div class="modal-overlay" id="missing-modal">
+  <div class="modal" style="max-width:520px">
+    <h2>📋 미입력 현황</h2>
+    <div class="sub">부서·달·주를 고르면 아직 입력하지 않은 선생님을 보여줍니다</div>
+
+    <label class="field-label">부서 선택</label>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-sky btn-sm" id="miss-dept-junior" onclick="missSetDept('junior')">🌱 유초등부</button>
+      <button class="btn btn-ghost btn-sm" id="miss-dept-senior" onclick="missSetDept('senior')">✝️ 중고등부</button>
+    </div>
+
+    <label class="field-label">달 선택</label>
+    <select id="miss-month" class="field-input" onchange="missSetMonth(+this.value)"></select>
+
+    <label class="field-label">주 선택</label>
+    <div class="miss-weeks" id="miss-weeks"></div>
+
+    <div id="miss-result"></div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeMissingModal()">닫기</button>
+      <button class="btn btn-sky" id="miss-copy-btn" onclick="copyMissing()">📋 명단 복사</button>
+    </div>
+  </div>
+</div>
+
 <!-- 보고서 출력용 숨김 영역 -->
 <div id="report-print-area" style="display:none"></div>
 
@@ -2198,6 +2425,7 @@ function printReport() {
 document.getElementById('pin-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeChangePinModal(); });
 document.getElementById('settings-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeSettingsModal(); });
 document.getElementById('report-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeReportModal(); });
+document.getElementById('missing-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeMissingModal(); });
 </script>
 
 <style>

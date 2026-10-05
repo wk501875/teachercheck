@@ -13,6 +13,12 @@
   - 명단 행 저장도 `updated_at`이 맞을 때만 성공. 부서 전체를 통째로 저장하는 방식(`PUT`)은 쓰지 않음.
 - 사용자는 개발자가 아니고 태블릿으로 작업함. 설명은 한국어로 쉽게.
 
+## 홈 화면에 추가 (앱처럼 쓰기)
+- 관련 파일: `manifest.webmanifest`, `icon.svg`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `index.html` `<head>`의 메타 태그.
+- 서비스 워커는 넣지 않음(파일을 오래 캐시하면 수정 사항이 바로 반영되지 않음).
+- 안드로이드(크롬): teachercheck.pages.dev 접속 → 오른쪽 위 ⋮ 메뉴 → "홈 화면에 추가"(또는 "앱 설치") → 추가.
+- 아이폰(사파리): teachercheck.pages.dev 접속 → 아래쪽 공유 버튼(□↑) → "홈 화면에 추가" → 추가.
+
 ## 반드시 지킬 규칙
 - `ROW_SUFFIX` 값을 바꾸지 말 것.
 - `junior` / `senior` 행은 **읽기만 허용, 쓰기는 금지**. 이 행에 쓰기(PUT/PATCH/INSERT/DELETE)하는 코드를 만들지 말고, `functions/supabase.js`에서 2026 회기 PUT을 거부하는 안전장치를 없애지 말 것.
