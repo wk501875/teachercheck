@@ -24,8 +24,15 @@
   - 명단 행 저장도 `updated_at`이 맞을 때만 성공. 부서 전체를 통째로 저장하는 방식(`PUT`)은 쓰지 않음.
 - 사용자는 개발자가 아니고 태블릿으로 작업함. 설명은 한국어로 쉽게.
 
+## 화면 디자인
+- 앱 이름: "일산교회 교사 체크리스트"(홈 화면 짧은 이름 "교사 체크리스트"). 이미지: `assets/church-logo.png`, `assets/church-illustration.jpg`.
+- 글꼴: 제목·큰 숫자 Black Han Sans, 본문 IBM Plex Sans KR. 사람 이름이 들어가는 곳은 본문 글꼴(Black Han Sans에 없는 글자가 섞여 보이지 않게).
+- 색: 글자·테두리 #0E2A47 / 바탕 #FBF8F1 / 카드 #FFFDF8 / 보조 글자 #44586E / 옅은 선 #C9D3DC / 하늘색 #A9D8F0 / 연한 하늘 #E1F1FA / 노랑 #F7DC7A / 연두(O) #BFDD9C / 살구(X) #FFBE9F.
+- 카드·버튼은 1.5px 남색 테두리, 둥근 모서리, 그림자·그라데이션 없음. 버튼에 이모지 없음. 누르는 칸은 최소 44px.
+- 입력 화면은 "주 단위 카드"(성경읽기 7칸 + 참석 5칸). 칸을 누를 때마다 빈칸 → O → X → 빈칸. 입력 시 화면 전체를 다시 그리지 않음(스크롤 고정).
+
 ## 홈 화면에 추가 (앱처럼 쓰기)
-- 관련 파일: `manifest.webmanifest`, `icon.svg`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `index.html` `<head>`의 메타 태그.
+- 관련 파일: `manifest.webmanifest`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png`(교회 로고, 크림색 바탕), `index.html` `<head>`의 메타 태그.
 - 서비스 워커는 넣지 않음(파일을 오래 캐시하면 수정 사항이 바로 반영되지 않음).
 - 안드로이드(크롬): teachercheck.pages.dev 접속 → 오른쪽 위 ⋮ 메뉴 → "홈 화면에 추가"(또는 "앱 설치") → 추가.
 - 아이폰(사파리): teachercheck.pages.dev 접속 → 아래쪽 공유 버튼(□↑) → "홈 화면에 추가" → 추가.
