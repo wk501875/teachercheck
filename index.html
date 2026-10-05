@@ -688,7 +688,7 @@ async function syncToCloud(targetDept = null) {
         locked_months: lockedMonths,
         _ts: tsByDept[dept]
       };
-      const res = await fetch('/functions/supabase', {
+      const res = await fetch('/supabase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dept, method: 'PUT', body: payload })
@@ -713,7 +713,7 @@ async function syncFromCloud() {
   try {
     const results = {};
     for (const dept of ['junior', 'senior']) {
-      const res = await fetch('/functions/supabase', {
+      const res = await fetch('/supabase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dept, method: 'GET' })
@@ -844,7 +844,7 @@ window.addEventListener('beforeunload', () => {
       _ts: tsByDept[dept]
     };
     const body = JSON.stringify({ dept, method: 'PUT', body: payload });
-    navigator.sendBeacon('/functions/supabase', new Blob([body], {type: 'application/json'}));
+    navigator.sendBeacon('/supabase', new Blob([body], {type: 'application/json'}));
   });
 });
 /* ══════ EXPORT / IMPORT ══════ */
@@ -1121,16 +1121,22 @@ async function applySettings() {
       }))
   );
   if (!newTeachers.length) { showToast('⚠️ 선생님을 1명 이상 입력해주세요'); return; }
+  // 저장은 "지금 모달에서 편집 중인 부서" 기준으로 처리 (탭 전환 후에도 정확히 반영되도록)
+  const dept = lockModalActiveDept;
+  const prevTeachers = teachersByDept[dept] || [];
+  const prevState = stateByDept[dept] || [];
   const newState = newTeachers.map(t => {
-    const oldIdx = teachers.findIndex(ot => ot.name === t.name);
-    return oldIdx !== -1 ? state[oldIdx] : emptyTeacherState();
+    const oldIdx = prevTeachers.findIndex(ot => ot.name === t.name);
+    return oldIdx !== -1 ? prevState[oldIdx] : emptyTeacherState();
   });
   orgName = newOrg;
   if (newPw) adminPw = newPw; // 평문 저장
-  teachers = newTeachers; state = newState;
-  teachersByDept[activeDept] = teachers;
-  stateByDept[activeDept] = state;
-  activeTeacher = Math.min(activeTeacher, teachers.length-1);
+  teachersByDept[dept] = newTeachers;
+  stateByDept[dept] = newState;
+  if (dept === activeDept) {
+    teachers = newTeachers; state = newState;
+    activeTeacher = Math.min(activeTeacher, teachers.length-1);
+  }
 
   cloudCfg.enabled = document.getElementById('modal-supabase-enabled').checked;
   saveCloudCfg();
@@ -1141,9 +1147,14 @@ async function applySettings() {
 /* ══════ LOCK MONTH UI (settings modal) ══════ */
 let lockModalActiveDept = 'junior';
 function lockModalSwitchDept(dept) {
+  if (dept === lockModalActiveDept) return;
+  // 편집 중이던 부서의 미저장 변경사항을 먼저 보존한 뒤 전환
+  teachersByDept[lockModalActiveDept] = modalTeachers.map(t => ({...t}));
   lockModalActiveDept = dept;
+  modalTeachers = (teachersByDept[dept] || []).map(t => ({...t}));
   updateLockDeptButtons();
   renderLockMonthList();
+  renderModalList();
 }
 function updateLockDeptButtons() {
   document.getElementById('lock-dept-junior').className = 'btn btn-sm ' + (lockModalActiveDept==='junior' ? 'btn-sky' : 'btn-ghost');
@@ -1227,7 +1238,7 @@ function buildTeacherTabs() {
   document.getElementById('teacher-count-badge').textContent = teachers.length+'명';
   const wrap = document.getElementById('teacher-tabs'); wrap.innerHTML = '';
   teachers.forEach((t, ti) => {
-    const hasDat = hasTeacherData(ti), isActive = ti===activeTeacher;
+    const hasDat = hasMonthData(ti, activeMonth), isActive = ti===activeTeacher;
     const btn = document.createElement('button');
     btn.className = 't-tab'+(isActive?' active':(hasDat?' has-data':''));
     btn.textContent = t.name+(hasDat&&!isActive?' ✓':'');
@@ -1591,7 +1602,7 @@ document.getElementById('login-screen').classList.remove('hidden');
   try {
     const results = {};
     for (const dept of ['junior', 'senior']) {
-      const res = await fetch('/functions/supabase', {
+      const res = await fetch('/supabase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dept, method: 'GET' })
