@@ -50,6 +50,11 @@
   .btn-full{width:100%;}
   .btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
 
+  /* ── 미리보기(데모) 안내 ── */
+  .demo-banner{max-width:560px;margin:0 auto 12px;background:var(--yellow);border:1.5px solid var(--ink);border-radius:18px;padding:10px 14px;font-size:13px;line-height:1.55;}
+  .demo-banner b{font-weight:700;}
+  .demo-hint{display:block;margin-top:4px;font-weight:600;}
+
   /* ── Toast ── */
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(90px);background:var(--ink);color:var(--card);padding:12px 20px;border-radius:999px;font-size:14px;font-weight:600;z-index:9999;transition:transform .25s ease,opacity .25s ease;opacity:0;pointer-events:none;max-width:calc(100vw - 32px);text-align:center;}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
@@ -270,6 +275,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+<div class="demo-banner hidden" id="demo-banner">
+  <b>미리보기</b> 실제 기록과 연결되어 있지 않은 연습용 화면입니다. 입력한 내용은 저장되지 않고 새로고침하면 처음으로 돌아갑니다.
+  <span class="demo-hint">선생님 PIN <b>0000</b> · 관리자 비밀번호 <b>1234</b></span>
+</div>
 
 <!-- ══════ LOGIN ══════ -->
 <div id="login-screen">
@@ -500,12 +509,20 @@
  * 현재 회기는 서버 시간으로 정함: 마지막으로 서버가 알려준 회기(SEASON_HINT_KEY)로 화면을 열고,
  * 서버 응답의 current_season과 다르면 그 회기로 저장한 뒤 화면을 새로 엶.
  */
+/* ══════ 미리보기(데모) 모드 ══════
+ * teachercheck.pages.dev/demo (또는 주소 끝에 ?demo=1) 로 열면 실제 서버에 전혀 연결하지 않고
+ * 가짜 명단·기록으로 화면만 보여줌. 입력은 이 화면 안에서만 바뀌고 서버·브라우저 어디에도 저장되지 않음.
+ */
+const DEMO = /^\/demo\/?$/.test(location.pathname) || new URLSearchParams(location.search).has('demo');
+const DEMO_PIN = '0000', DEMO_ADMIN_PW = '1234';
+
 const SEASON_HINT_KEY = 'checklist_season';
 function seasonForDate(d) {
   const kst = new Date(d.getTime() + 9 * 3600 * 1000);
   return kst.getUTCMonth() === 11 ? kst.getUTCFullYear() + 1 : kst.getUTCFullYear();
 }
 const YEAR = (() => {
+  if (DEMO) return Math.max(2027, seasonForDate(new Date())); // 데모: 기기 시계 기준
   try { const h = +localStorage.getItem(SEASON_HINT_KEY); if (Number.isInteger(h) && h >= 2027) return h; } catch(e) {}
   return Math.max(2027, seasonForDate(new Date())); // 첫 방문: 기기 시계로 추정 → 서버가 바로잡음
 })();
@@ -702,6 +719,7 @@ function hhmm() {
 }
 
 function persistLocal() {
+  if (DEMO) return; // 데모: 어디에도 저장하지 않음
   if (isPast()) return;
   try {
     localStorage.setItem(LS_KEY, JSON.stringify({
@@ -723,6 +741,7 @@ function markRecordDirty(dept, id) { if (id) pendingRecords[`${dept}|${id}`] = t
 function markRosterDirty(dept) { pendingRoster[dept] = true; }
 
 function loadFromLocal() {
+  if (DEMO) return false;
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return false;
@@ -762,10 +781,12 @@ function plain(msg) {
   return String(msg).replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim();
 }
 function setStatus(msg, type='') {
+  if (DEMO && type === 'saved') msg = '미리보기';
   const el = document.getElementById('save-status');
   el.textContent = plain(msg); el.className = 'save-status'+(type?' '+type:'');
 }
 function setSyncStatus(msg, type='') {
+  if (DEMO && type === 'synced') msg = '실제로 저장되지 않음';
   const el = document.getElementById('sync-status');
   el.classList.remove('hidden');
   el.textContent = plain(msg).replace(/\.{3}$/, '');
@@ -783,6 +804,7 @@ function hideSaveError() {
 // 서버가 알려준 현재 회기가 이 화면의 회기와 다르면 → 그 회기로 화면을 새로 엶
 let reloadingForSeason = false;
 function checkServerSeason(serverSeason) {
+  if (DEMO) return false;
   if (!Number.isInteger(serverSeason) || serverSeason === YEAR) {
     try { localStorage.setItem(SEASON_HINT_KEY, String(YEAR)); } catch(e) {}
     return false;
@@ -802,7 +824,98 @@ function checkServerSeason(serverSeason) {
   setTimeout(() => location.reload(), 1500);
   return true;
 }
+/* ── 데모용 가짜 서버 (메모리 안에서만 동작, 새로고침하면 처음으로) ── */
+const DEMO_NAMES = {
+  junior: ['김민준','이서연','박지후','최하윤','정도윤','강서아','조예준','윤지아'],
+  senior: ['장시우','임하은','한주원','오채원','서건우','신유나','권태민','황소율','송현우','안다인'],
+};
+let demoDB = null;
+function demoRandom(seed) {
+  let x = seed;
+  return () => (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648;
+}
+// 그럴듯한 기록 만들기: limit 날짜까지만 채움 (가끔 빈 주·빈 날 포함)
+function demoFill(months, seed, limit) {
+  const rnd = demoRandom(seed);
+  return months.map(mo => {
+    const ms = emptyMonthState(mo);
+    mo.weeks.forEach((wk, wi) => {
+      if (new Date(mo.year, mo.month - 1, wk.start) > limit || rnd() < 0.12) return;
+      CATS.forEach((_, ci) => { ms.att[wi][ci] = rnd() < 0.8 ? 'O' : 'X'; });
+    });
+    for (let d = 1; d <= mo.last; d++) {
+      if (new Date(mo.year, mo.month - 1, d) > limit) break;
+      const v = rnd();
+      if (v < 0.62) ms.bible[String(d)] = 'O'; else if (v < 0.72) ms.bible[String(d)] = 'X';
+    }
+    return ms;
+  });
+}
+function buildDemoDB() {
+  const now = new Date();
+  const start = new Date(CUR_MONTHS[0].year, CUR_MONTHS[0].month - 1, 1);
+  // 올해 기록: 오늘까지 (회기 시작 전이면 앞의 두 달을 채워 보여줌)
+  const curLimit = now < start ? new Date(start.getFullYear(), start.getMonth() + 2, 0) : now;
+  const db = { adminPw: DEMO_ADMIN_PW };
+  ['junior', 'senior'].forEach((dept, di) => {
+    const names = DEMO_NAMES[dept];
+    db[dept] = {
+      teachers: names.map((name, i) => ({ id: `d_${i + 1}`, name, pin: DEMO_PIN })),
+      records: {},
+      locked: {},
+      rosterVer: now.toISOString(),
+      past: names.slice(0, -1).map(name => ({ name })),
+      pastState: names.slice(0, -1).map((_, i) => demoFill(PAST_MONTHS, 900 + di * 50 + i, new Date(PAST_YEAR, 11, 31))),
+    };
+    names.forEach((_, i) => {
+      if (i % 4 === 3) return; // 일부 선생님은 아직 입력 없음 (미입력 현황 미리보기용)
+      db[dept].records[`d_${i + 1}`] = { state: demoFill(CUR_MONTHS, 100 + di * 50 + i, curLimit), version: 1 };
+    });
+  });
+  return db;
+}
+async function demoApi(p) {
+  if (!demoDB) demoDB = buildDemoDB();
+  const ok = data => ({ ok: true, status: 200, data: { ...data, current_season: YEAR } });
+  const fail = (status, data) => ({ ok: false, status, data: { ...data, current_season: YEAR } });
+  if (p.method === 'SEASON') return ok({ seasons: [PAST_YEAR, YEAR] });
+  const db = demoDB[p.dept];
+  if (!db) return fail(400, { error: 'Invalid dept' });
+  if (p.method === 'GET') {
+    if (p.season === PAST_YEAR) return ok({ teachers: clone(db.past), state: clone(db.pastState) });
+    return ok({
+      org_name: '일산교회', admin_pw: demoDB.adminPw, teachers: clone(db.teachers),
+      locked_months: clone(db.locked), roster_version: db.rosterVer, legacy_state: [],
+      records: Object.entries(db.records).map(([id, rec]) => ({ teacher_id: id, state: clone(rec.state), version: rec.version })),
+    });
+  }
+  if (p.season !== YEAR) return fail(403, { error: '지난해 기록은 조회만 가능합니다', code: 'season_closed' });
+  const b = p.body || {};
+  if (p.method === 'SAVE_RECORD') {
+    const cur = db.records[b.teacher_id], v = cur ? cur.version : 0;
+    if (b.version !== v) return fail(409, { conflict: true, record: cur ? { teacher_id: b.teacher_id, state: clone(cur.state), version: v } : null });
+    db.records[b.teacher_id] = { state: clone(b.state), version: v + 1 };
+    return ok({ ok: true, version: v + 1 });
+  }
+  if (p.method === 'SAVE_ROSTER') {
+    db.teachers = clone(b.teachers || []);
+    db.locked = clone(b.locked_months || {});
+    if (b.admin_pw) demoDB.adminPw = b.admin_pw;
+    db.rosterVer = new Date(Date.now() + 1).toISOString();
+    return ok({ ok: true, roster_version: db.rosterVer });
+  }
+  if (p.method === 'SET_PIN') {
+    const t = db.teachers.find(t => t.id === b.teacher_id);
+    if (!t || t.pin !== String(b.old_pin || '')) return fail(403, { error: '현재 PIN이 올바르지 않습니다.', code: 'wrong_pin' });
+    t.pin = String(b.new_pin);
+    db.rosterVer = new Date(Date.now() + 1).toISOString();
+    return ok({ ok: true, roster_version: db.rosterVer });
+  }
+  return fail(400, { error: 'Invalid method' });
+}
+
 async function api(payload) {
+  if (DEMO) return demoApi(payload); // 데모: 실제 서버에 연결하지 않음
   try {
     const res = await fetch('/supabase', {
       method: 'POST',
@@ -1102,6 +1215,7 @@ async function cloudSave() {
   const ok = await flushServerSaves();
   btn.disabled = false;
   btn.textContent = '저장';
+  if (DEMO) { showToast('미리보기라서 실제로는 저장되지 않습니다'); return; }
   showToast(ok ? '✅ 서버에 저장되었습니다!' : '❌ 저장 실패 — 화면 위 안내를 확인하세요');
 }
 async function manualSync() {
@@ -1909,6 +2023,18 @@ if (new URLSearchParams(location.search).get('clear') === '1') {
 }
 document.getElementById('season-past').textContent = `${PAST_YEAR}년`;
 document.getElementById('season-cur').textContent = `${YEAR}년`;
+if (DEMO) {
+  // 데모: 실제 명단 대신 가짜 명단, 검색엔진에 노출하지 않음
+  document.title = '미리보기 · 일산교회 교사 체크리스트';
+  document.head.insertAdjacentHTML('beforeend', '<meta name="robots" content="noindex, nofollow">');
+  document.getElementById('demo-banner').classList.remove('hidden');
+  ['junior', 'senior'].forEach(dept => {
+    teachersByDept[dept] = DEMO_NAMES[dept].map((name, i) => ({ id: `d_${i + 1}`, name, pin: DEMO_PIN }));
+    stateByDept[dept] = teachersByDept[dept].map(() => emptyTeacherState());
+  });
+  orgName = '일산교회';
+  adminPw = DEMO_ADMIN_PW;
+}
 // 선생님 고유 ID 부여 (예전 명단은 순서대로 t_1, t_2 ...)
 teachersByDept.junior = ensureIds(teachersByDept.junior);
 teachersByDept.senior = ensureIds(teachersByDept.senior);
