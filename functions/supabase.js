@@ -14,6 +14,9 @@ const SUPABASE_KEY = 'sb_publishable_GkszbBMYO7SQYedNBw0-7Q_Jv90-DUH';
 const LEGACY_SEASON = 2026;
 const FIRST_SEASON = 2027; // 이 사이트의 첫 회기 (2026년 12월 전에도 2027 회기를 준비할 수 있게)
 const RECORDS_TABLE = 'teacher_records';
+// 중고등부 학생 특이사항(인수인계): 학생 한 명 = student_notes 한 행. 중고등부만 사용, 삭제 없음(숨김만)
+const NOTES_TABLE = 'student_notes';
+const NOTE_FIELDS = ['name', 'teacher', 'salvation', 'family', 'sunday', 'saturday', 'attitude', 'personality', 'memo'];
 
 function currentSeason() {
   const kst = new Date(Date.now() + 9 * 3600 * 1000); // 한국 시간
@@ -250,6 +253,60 @@ async function handleSaveRecord(dept, season, p) {
   return json({ conflict: true, record: await getRecord(dept, season, p.teacher_id) }, 409);
 }
 
+/* ── 중고등부 학생 특이사항 ── */
+function notesMissingError() {
+  return new HttpError(503, '서버에 학생 특이사항 저장 공간(student_notes)이 아직 없습니다. 관리자가 SQL을 실행해야 합니다.', { code: 'notes_table_missing' });
+}
+async function getNote(season, studentId) {
+  const r = await sb(`${NOTES_TABLE}?season=eq.${season}&dept=eq.senior&student_id=eq.${studentId}&select=*`);
+  if (isMissingTable(r)) throw notesMissingError();
+  if (!r.ok) throw new HttpError(502, `Supabase GET failed: ${r.status}`);
+  return (r.data && r.data[0]) || null;
+}
+async function handleGetNotes(season) {
+  const r = await sb(`${NOTES_TABLE}?season=eq.${season}&dept=eq.senior&select=student_id,class_name,data,archived,version,updated_at,updated_by&order=updated_at.asc`);
+  if (isMissingTable(r)) throw notesMissingError();
+  if (!r.ok) throw new HttpError(502, `Supabase GET failed: ${r.status}`);
+  return json({ notes: r.data || [] });
+}
+async function handleSaveNote(season, p) {
+  if (!p || !ID_RE.test(String(p.student_id))) throw new HttpError(400, 'Invalid student id');
+  const version = Number(p.version);
+  if (!Number.isInteger(version) || version < 0) throw new HttpError(400, 'Invalid version');
+  const src = p.data && typeof p.data === 'object' ? p.data : {};
+  const data = {};
+  NOTE_FIELDS.forEach(k => { data[k] = String(src[k] ?? '').slice(0, k === 'memo' ? 4000 : 60); });
+  if (!data.name.trim()) throw new HttpError(400, '학생 이름을 입력해주세요.');
+  const fields = {
+    class_name: String(p.class_name || '').slice(0, 30),
+    data,
+    archived: !!p.archived,
+    updated_by: String(p.updated_by || '').slice(0, 30),
+    updated_at: new Date().toISOString(),
+  };
+  if (version === 0) {
+    const r = await sb(NOTES_TABLE, {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ season: String(season), dept: 'senior', student_id: p.student_id, ...fields, version: 1 }),
+    });
+    if (isMissingTable(r)) throw notesMissingError();
+    if (r.ok) return json({ ok: true, version: 1, updated_at: fields.updated_at });
+    if (r.status !== 409) throw new HttpError(502, `Supabase POST failed: ${r.status} ${r.text}`);
+  } else {
+    const r = await sb(`${NOTES_TABLE}?season=eq.${season}&dept=eq.senior&student_id=eq.${p.student_id}&version=eq.${version}`, {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify({ ...fields, version: version + 1 }),
+    });
+    if (isMissingTable(r)) throw notesMissingError();
+    if (!r.ok) throw new HttpError(502, `Supabase PATCH failed: ${r.status} ${r.text}`);
+    if (r.data && r.data.length) return json({ ok: true, version: version + 1, updated_at: fields.updated_at });
+  }
+  // 다른 선생님이 먼저 저장함 → 최신 내용을 돌려주고 화면에서 바뀐 칸만 합쳐 다시 저장
+  return json({ conflict: true, note: await getNote(season, p.student_id) }, 409);
+}
+
 export async function onRequestPost(context) {
   let body;
   try {
@@ -285,11 +342,15 @@ export async function onRequestPost(context) {
     if (method === 'GET') {
       return await withSeason(reqSeason === cur ? handleGet(dept, cur) : handlePastGet(dept, reqSeason));
     }
+    if (method === 'GET_NOTES') {
+      if (dept !== 'senior') return json({ error: '학생 특이사항은 중고등부만 사용합니다', current_season: cur }, 400);
+      return await withSeason(handleGetNotes(reqSeason));
+    }
     if (method === 'PUT') {
       // 예전 화면의 "부서 전체 통째로 저장"은 더 이상 받지 않음
       return json({ error: '사이트가 업데이트되었습니다. 페이지를 새로고침 해주세요.', code: 'outdated_client', current_season: cur }, 410);
     }
-    if (!['SAVE_ROSTER', 'SET_PIN', 'SAVE_RECORD'].includes(method)) {
+    if (!['SAVE_ROSTER', 'SET_PIN', 'SAVE_RECORD', 'SAVE_NOTE'].includes(method)) {
       return json({ error: 'Invalid method', current_season: cur }, 400);
     }
     // 쓰기는 회기를 밝힌 요청 + 현재 회기만 허용 (지난 회기·2026 원본 행은 절대 수정하지 않음)
@@ -301,6 +362,10 @@ export async function onRequestPost(context) {
     }
     if (method === 'SAVE_ROSTER') return await withSeason(handleSaveRoster(dept, cur, payload));
     if (method === 'SET_PIN') return await withSeason(handleSetPin(dept, cur, payload));
+    if (method === 'SAVE_NOTE') {
+      if (dept !== 'senior') return json({ error: '학생 특이사항은 중고등부만 사용합니다', current_season: cur }, 400);
+      return await withSeason(handleSaveNote(cur, payload));
+    }
     return await withSeason(handleSaveRecord(dept, cur, payload));
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;

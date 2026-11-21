@@ -252,6 +252,41 @@
   .lock-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:4px;}
   .lock-grid .btn{padding:0 4px;font-size:13px;}
 
+  /* ── 학생 특이사항 (중고등부) ── */
+  .view-switch{margin-bottom:12px;}
+  .notes-view{display:none;}
+  #app-screen.notes-mode .notes-view{display:block;}
+  #app-screen.notes-mode #teacher-selector-wrap,#app-screen.notes-mode #month-tabs-wrap,
+  #app-screen.notes-mode #main-card,#app-screen.notes-mode #stats-panel{display:none!important;}
+  .notes-intro{padding:14px;margin-bottom:12px;}
+  .notes-intro-head{display:flex;align-items:center;gap:10px;}
+  .notes-intro-head > div{flex:1;min-width:0;}
+  .notes-title{font-family:var(--title);font-size:22px;line-height:1.2;}
+  .notes-sub{font-size:13px;color:var(--sub);margin-top:2px;}
+  .tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;border:1.5px solid var(--ink);background:var(--green);font-size:11px;font-weight:700;}
+  .note-card{display:block;width:100%;text-align:left;padding:14px;margin-bottom:10px;cursor:pointer;font-family:inherit;color:var(--ink);}
+  .note-card.archived{opacity:.6;border-style:dashed;}
+  .note-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
+  .note-name{font-size:18px;font-weight:700;}
+  .note-class{font-size:12px;font-weight:700;background:var(--sky);border:1.5px solid var(--ink);border-radius:999px;padding:1px 9px;}
+  .note-teacher{font-size:13px;color:var(--sub);margin-bottom:8px;}
+  .note-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;}
+  .note-chip{font-size:12px;border:1.5px solid var(--line);border-radius:999px;padding:2px 9px;background:var(--bg);}
+  .note-chip b{font-weight:700;}
+  .note-memo{font-size:13px;line-height:1.6;white-space:pre-line;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:8px;}
+  .note-meta{font-size:12px;color:var(--sub);}
+  .notes-empty{padding:28px 16px;text-align:center;font-size:14px;color:var(--sub);line-height:1.7;margin-bottom:10px;}
+  .notes-hidden-toggle{display:flex;justify-content:center;margin:4px 0 12px;}
+  .note-q{margin-bottom:14px;}
+  .opt-row{display:flex;flex-wrap:wrap;gap:6px;}
+  .opt{min-height:44px;min-width:56px;padding:0 14px;border-radius:999px;border:1.5px solid var(--ink);background:var(--card);font-size:14px;font-weight:600;cursor:pointer;}
+  .opt.on{background:var(--sky);}
+  .opt:disabled{cursor:default;opacity:1;}
+  .opt:disabled:not(.on){color:var(--sub);border-color:var(--line);}
+  .note-memo-input{min-height:160px;resize:vertical;line-height:1.6;}
+  /* 학생 이름이 들어가는 제목은 본문 글꼴 */
+  #note-title{font-family:inherit;font-weight:700;}
+
   /* ── 미입력 현황 ── */
   .miss-weeks{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
   .miss-weeks .m-tab{padding:0 12px;font-size:13px;}
@@ -371,6 +406,15 @@
     </div>
     <span class="season-notice hidden" id="season-notice">지난해 기록은 조회만 가능합니다</span>
   </div>
+
+  <!-- 중고등부만: 체크리스트 / 학생 특이사항 전환 -->
+  <div class="view-switch hidden" id="view-switch">
+    <div class="seg">
+      <button class="btn btn-sky" id="view-check" onclick="setViewMode('check')">체크리스트</button>
+      <button class="btn" id="view-notes" onclick="setViewMode('notes')">학생 특이사항</button>
+    </div>
+  </div>
+  <div id="notes-view" class="notes-view"></div>
 
   <div class="teacher-wrap card hidden" id="teacher-selector-wrap">
     <div class="teacher-header">
@@ -872,6 +916,19 @@ function buildDemoDB() {
       db[dept].records[`d_${i + 1}`] = { state: demoFill(CUR_MONTHS, 100 + di * 50 + i, curLimit), version: 1 };
     });
   });
+  // 중고등부 학생 특이사항 (가짜 학생만)
+  const stamp = new Date(now.getTime() - 86400000).toISOString();
+  db.notes = { [YEAR]: [
+    { student_id: 'ds_1', class_name: '중등형제 1반', archived: false, version: 1, updated_at: stamp, updated_by: '장시우',
+      data: { name: '가나다', teacher: '장시우t, 한주원t', salvation: '예', family: '부모님과 함께', sunday: '100%', saturday: '70%', attitude: '상', personality: '외향적',
+        memo: '- 밝고 친구들과 잘 어울림\n- 운동을 좋아해서 토요교제 출석이 들쭉날쭉함\n- 칭찬해주면 더 열심히 하는 편' } },
+    { student_id: 'ds_2', class_name: '중등형제 1반', archived: false, version: 1, updated_at: stamp, updated_by: '장시우',
+      data: { name: '라마바', teacher: '장시우t, 한주원t', salvation: '아니오', family: '어머니', sunday: '50%', saturday: '30%', attitude: '중', personality: '내성적',
+        memo: '- 올해 이사 와서 아직 적응 중\n- 먼저 말을 걸어주면 잘 대답함\n- 기도하며 기다려주는 것이 필요해 보임' } },
+    { student_id: 'ds_3', class_name: '고등자매 2반', archived: false, version: 1, updated_at: stamp, updated_by: '임하은',
+      data: { name: '사아자', teacher: '임하은t', salvation: '예', family: '혼자', sunday: '70%', saturday: '50%', attitude: '상', personality: '보통',
+        memo: '- 혼자 교회에 나옴, 가족 전도에 마음이 있음\n- 책임감이 강하고 맡은 일을 잘 해냄' } },
+  ], [PAST_YEAR]: [] };
   return db;
 }
 async function demoApi(p) {
@@ -889,8 +946,17 @@ async function demoApi(p) {
       records: Object.entries(db.records).map(([id, rec]) => ({ teacher_id: id, state: clone(rec.state), version: rec.version })),
     });
   }
+  if (p.method === 'GET_NOTES') return ok({ notes: clone(demoDB.notes[p.season] || []) });
   if (p.season !== YEAR) return fail(403, { error: '지난해 기록은 조회만 가능합니다', code: 'season_closed' });
   const b = p.body || {};
+  if (p.method === 'SAVE_NOTE') {
+    const list = demoDB.notes[YEAR], cur = list.find(n => n.student_id === b.student_id), v = cur ? cur.version : 0;
+    if (b.version !== v) return fail(409, { conflict: true, note: cur ? clone(cur) : null });
+    const saved = { student_id: b.student_id, class_name: b.class_name || '', data: clone(b.data || {}), archived: !!b.archived,
+      version: v + 1, updated_at: new Date().toISOString(), updated_by: b.updated_by || '' };
+    if (cur) Object.assign(cur, saved); else list.push(saved);
+    return ok({ ok: true, version: v + 1, updated_at: saved.updated_at });
+  }
   if (p.method === 'SAVE_RECORD') {
     const cur = db.records[b.teacher_id], v = cur ? cur.version : 0;
     if (b.version !== v) return fail(409, { conflict: true, record: cur ? { teacher_id: b.teacher_id, state: clone(cur.state), version: v } : null });
@@ -1405,6 +1471,7 @@ async function loginTeacher() {
 }
 function logout() {
   if (isPast()) enterCurrentSeason();
+  viewMode = 'check'; notesCache = {}; notesFilter = '전체'; closeNoteModal();
   session = {role:null, teacherIdx:null, teacherId:null};
   ['admin-pw-input','teacher-pin-input'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('error'); });
   ['admin-error','teacher-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -2003,6 +2070,18 @@ function render(opts = {}) {
   const center = !!opts.center;
   updateTopSub();
   const y = window.scrollY; // 다시 그려도 세로 스크롤 위치는 그대로
+  // 중고등부만: 체크리스트 / 학생 특이사항 전환
+  if (!notesAvailable()) viewMode = 'check';
+  const notesOn = viewMode === 'notes';
+  document.getElementById('view-switch').classList.toggle('hidden', !notesAvailable());
+  document.getElementById('view-check').className = 'btn' + (notesOn ? '' : ' btn-sky');
+  document.getElementById('view-notes').className = 'btn' + (notesOn ? ' btn-sky' : '');
+  document.getElementById('app-screen').classList.toggle('notes-mode', notesOn);
+  if (notesOn) {
+    renderNotes();
+    if (window.scrollY !== y) window.scrollTo(window.scrollX, y);
+    return;
+  }
   const noRecord = isPast() && !teachers.length;
   document.getElementById('month-tabs-wrap').classList.toggle('hidden', noRecord);
   document.getElementById('stats-panel').classList.toggle('hidden', noRecord);
@@ -2060,6 +2139,241 @@ document.getElementById('login-screen').classList.remove('hidden');
     if (hasPending()) scheduleServerSave(5000);
   }
 })();
+
+/* ══════ 중고등부 학생 특이사항 (내년 담당 선생님께 인수인계) ══════
+ * 학생 한 명 = 서버 student_notes 한 행. 민감한 정보라서 브라우저(localStorage)에는 저장하지 않음.
+ * 중고등부 선생님·관리자 모두 보고 고칠 수 있음. 지난해는 조회만. 삭제 대신 "숨기기".
+ */
+const NOTE_CLASSES = [
+  '중등형제 1반','중등형제 2반','중등형제 3반','중등형제 4반',
+  '중등자매 1반','중등자매 2반','중등자매 3반','중등자매 4반',
+  '고등형제 1반','고등형제 2반','고등형제 3반',
+  '고등자매 1반','고등자매 2반','고등자매 3반','고등자매 4반',
+];
+const NOTE_PERCENT = ['10%','30%','50%','70%','100%'];
+const NOTE_QUESTIONS = [
+  { key: 'salvation',   label: '1. 구원여부',                         short: '구원',     options: ['예','아니오'] },
+  { key: 'family',      label: '2. 가족과 함께 신앙생활을 하고 있나요?', short: '가족',     options: ['부모님과 함께','어머니','아버지','혼자'] },
+  { key: 'sunday',      label: '3. 주일 출석률',                      short: '주일',     options: NOTE_PERCENT },
+  { key: 'saturday',    label: '4. 토요교제 출석률',                   short: '토요교제', options: NOTE_PERCENT },
+  { key: 'attitude',    label: '5. 말씀 태도가 좋은가요?',             short: '말씀 태도', options: ['하','중','상'] },
+  { key: 'personality', label: '6. 학생의 성격은 어떠한가요?',          short: '성격',     options: ['내성적','보통','외향적'] },
+];
+let viewMode = 'check';      // 'check' = 체크리스트, 'notes' = 학생 특이사항
+let notesCache = {};         // 회기 → { notes, loading, error }
+let notesFilter = '전체';
+let notesShowHidden = false;
+let noteEdit = null;         // 편집 중인 학생 { studentId, isNew, version, base, archived }
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function notesAvailable() { return activeDept === 'senior' && !!session.role; }
+function myDisplayName() {
+  if (session.role === 'admin') return '관리자';
+  return (teachersByDept[activeDept][session.teacherIdx] || {}).name || '';
+}
+function setViewMode(mode) {
+  if (mode === 'notes' && !notesAvailable()) mode = 'check';
+  if (mode === 'notes' && viewMode !== 'notes') delete notesCache[viewYear]; // 들어올 때마다 최신 내용
+  viewMode = mode;
+  render({ center: mode === 'check' });
+}
+async function loadNotes(season) {
+  const c = notesCache[season] = { notes: [], loading: true, error: '' };
+  const r = await api({ dept: 'senior', season, method: 'GET_NOTES' });
+  if (notesCache[season] !== c) return;
+  c.loading = false;
+  if (r.ok) c.notes = r.data.notes || [];
+  else c.error = r.data.code === 'notes_table_missing'
+    ? '서버에 학생 특이사항 저장 공간이 아직 없습니다. 관리자에게 알려주세요. (SQL 실행 필요)'
+    : `학생 특이사항을 불러오지 못했습니다: ${plain(r.data.error || ('HTTP ' + r.status))}`;
+  if (viewMode === 'notes' && viewYear === season) renderNotes();
+}
+function noteClassOrder(n) {
+  const i = NOTE_CLASSES.indexOf(n.class_name);
+  return i === -1 ? NOTE_CLASSES.length : i;
+}
+function noteDateText(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function renderNotes() {
+  const el = document.getElementById('notes-view');
+  const c = notesCache[viewYear];
+  const past = isPast();
+  if (!c) { loadNotes(viewYear); }
+  if (!c || c.loading) {
+    el.innerHTML = '<div class="card notes-empty">학생 특이사항을 불러오는 중...</div>';
+    return;
+  }
+  const shown = c.notes.filter(n => !n.archived);
+  const hiddenNotes = c.notes.filter(n => n.archived);
+  const classes = [...NOTE_CLASSES];
+  c.notes.forEach(n => { if (n.class_name && !classes.includes(n.class_name)) classes.push(n.class_name); });
+  if (notesFilter !== '전체' && !classes.includes(notesFilter)) notesFilter = '전체';
+  const count = cls => shown.filter(n => (n.class_name || '미정') === cls).length;
+  const pick = list => list
+    .filter(n => notesFilter === '전체' || (n.class_name || '미정') === notesFilter)
+    .sort((a, b) => noteClassOrder(a) - noteClassOrder(b) || String(a.data.name).localeCompare(String(b.data.name), 'ko'));
+
+  const card = n => {
+    const d = n.data || {};
+    const chips = NOTE_QUESTIONS.filter(q => d[q.key]).map(q => `<span class="note-chip">${esc(q.short)} <b>${esc(d[q.key])}</b></span>`).join('');
+    return `<button class="note-card card${n.archived ? ' archived' : ''}" data-sid="${esc(n.student_id)}">
+      <div class="note-head"><span class="note-name">${esc(d.name)}</span><span class="note-class">${esc(n.class_name || '분반 미정')}</span></div>
+      ${d.teacher ? `<div class="note-teacher">분반교사 ${esc(d.teacher)}</div>` : ''}
+      ${chips ? `<div class="note-chips">${chips}</div>` : ''}
+      ${d.memo ? `<div class="note-memo">${esc(d.memo)}</div>` : ''}
+      <div class="note-meta">${n.archived ? '숨긴 학생 · ' : ''}마지막 수정 ${esc(n.updated_by || '-')} · ${noteDateText(n.updated_at)}</div>
+    </button>`;
+  };
+  const list = pick(shown);
+  el.innerHTML = `
+    <div class="card notes-intro">
+      <div class="notes-intro-head">
+        <div>
+          <div class="notes-title">학생 특이사항</div>
+          <div class="notes-sub">${past ? `${viewYear}년에 작성한 내용입니다. 조회만 가능합니다.` : '내년 담당 선생님께 학생의 특징을 넘겨주는 곳입니다. 중고등부 선생님 모두 볼 수 있습니다.'}</div>
+        </div>
+        ${past ? '' : '<button class="btn btn-sky" onclick="openNoteModal()">학생 추가</button>'}
+      </div>
+    </div>
+    ${c.error ? `<div class="save-error"><span>${esc(c.error)}</span><button class="btn btn-sm btn-pink" onclick="delete notesCache[viewYear]; renderNotes()">다시 시도</button></div>` : ''}
+    <div class="month-tabs-wrap"><div class="month-tabs">
+      <button class="m-tab${notesFilter === '전체' ? ' active' : ''}" data-filter="전체">전체 ${shown.length}</button>
+      ${classes.map(cls => `<button class="m-tab${notesFilter === cls ? ' active' : ''}" data-filter="${esc(cls)}">${esc(cls)}${count(cls) ? ` <span class="tab-count">${count(cls)}</span>` : ''}</button>`).join('')}
+    </div></div>
+    ${list.length ? list.map(card).join('') : `<div class="card notes-empty">${c.error ? '' : (past ? '작성된 특이사항이 없습니다.' : (notesFilter === '전체' ? '아직 작성된 학생이 없습니다.<br>위의 "학생 추가"를 눌러 시작하세요.' : '이 분반에 작성된 학생이 없습니다.'))}</div>`}
+    ${hiddenNotes.length ? `<div class="notes-hidden-toggle"><button class="btn btn-sm" onclick="notesShowHidden=!notesShowHidden; renderNotes()">숨긴 학생 ${hiddenNotes.length}명 ${notesShowHidden ? '접기' : '보기'}</button></div>` : ''}
+    ${notesShowHidden ? pick(hiddenNotes).map(card).join('') : ''}`;
+  el.querySelectorAll('[data-filter]').forEach(b => { b.onclick = () => { notesFilter = b.dataset.filter; renderNotes(); }; });
+  el.querySelectorAll('[data-sid]').forEach(b => { b.onclick = () => openNoteModal(b.dataset.sid); });
+  const sel = el.querySelector('.m-tab.active');
+  if (sel) centerActiveTab(sel.parentElement.parentElement, '.m-tab.active');
+}
+
+/* ── 특이사항 작성 창 ── */
+function noteFormData() {
+  const data = {
+    name: document.getElementById('note-name').value.trim(),
+    teacher: document.getElementById('note-teacher').value.trim(),
+    memo: document.getElementById('note-memo').value.replace(/\s+$/, ''),
+  };
+  NOTE_QUESTIONS.forEach(q => {
+    const on = document.querySelector(`#note-questions [data-q="${q.key}"] .opt.on`);
+    data[q.key] = on ? on.dataset.v : '';
+  });
+  return { class_name: document.getElementById('note-class').value, data };
+}
+function fillNoteForm(note) {
+  const d = (note && note.data) || {};
+  document.getElementById('note-name').value = d.name || '';
+  document.getElementById('note-teacher').value = d.teacher || '';
+  document.getElementById('note-memo').value = d.memo || '';
+  const classSel = document.getElementById('note-class');
+  const classes = [...NOTE_CLASSES];
+  if (note && note.class_name && !classes.includes(note.class_name)) classes.push(note.class_name);
+  classSel.innerHTML = '<option value="">분반 선택</option>' + classes.map(c => `<option>${esc(c)}</option>`).join('');
+  classSel.value = (note && note.class_name) || (notesFilter !== '전체' ? notesFilter : '');
+  document.getElementById('note-questions').innerHTML = NOTE_QUESTIONS.map(q => `
+    <div class="note-q" data-q="${q.key}">
+      <div class="field-label">${esc(q.label)}</div>
+      <div class="opt-row">${q.options.map(o => `<button type="button" class="opt${d[q.key] === o ? ' on' : ''}" data-v="${esc(o)}">${esc(o)}</button>`).join('')}</div>
+    </div>`).join('');
+}
+function openNoteModal(studentId) {
+  const c = notesCache[viewYear];
+  const note = studentId && c ? c.notes.find(n => n.student_id === studentId) : null;
+  const past = isPast();
+  noteEdit = {
+    studentId: note ? note.student_id : 's_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    isNew: !note,
+    version: note ? note.version : 0,
+    archived: note ? !!note.archived : false,
+  };
+  fillNoteForm(note);
+  noteEdit.base = { ...noteFormData(), archived: noteEdit.archived };
+  if (!note) noteEdit.base = { class_name: '', data: {}, archived: false };
+  document.getElementById('note-title').textContent = note ? (note.data.name || '학생 특이사항') : '학생 추가';
+  document.getElementById('note-sub').textContent = past
+    ? `${viewYear}년에 작성한 내용입니다. 조회만 가능합니다.`
+    : (note ? `마지막 수정 ${note.updated_by || '-'} · ${noteDateText(note.updated_at)}` : '아래 양식에 맞춰 학생의 특징을 적어주세요. 누를 때마다 선택·해제됩니다.');
+  document.getElementById('note-error').classList.add('hidden');
+  const modal = document.getElementById('note-modal');
+  modal.querySelectorAll('input, select, textarea, .opt').forEach(x => { x.disabled = past; });
+  document.getElementById('note-save-btn').classList.toggle('hidden', past);
+  const hideBtn = document.getElementById('note-hide-btn');
+  hideBtn.classList.toggle('hidden', past || !note);
+  hideBtn.textContent = noteEdit.archived ? '다시 보이기' : '숨기기';
+  modal.classList.add('open');
+  modal.querySelector('.modal').scrollTop = 0;
+}
+function closeNoteModal() {
+  document.getElementById('note-modal').classList.remove('open');
+  noteEdit = null;
+}
+function showNoteError(msg) {
+  const e = document.getElementById('note-error');
+  e.textContent = plain(msg); e.classList.remove('hidden');
+}
+// 다른 선생님이 먼저 저장한 경우: 이 창에서 바꾼 칸만 최신 내용 위에 반영
+function mergeNote(base, local, server) {
+  const pickv = (l, b, s) => (l !== b ? l : s);
+  const data = {};
+  const sd = server.data || {}, bd = base.data || {}, ld = local.data || {};
+  new Set([...Object.keys(sd), ...Object.keys(ld)]).forEach(k => { data[k] = pickv(ld[k] ?? '', bd[k] ?? '', sd[k] ?? ''); });
+  return {
+    class_name: pickv(local.class_name, base.class_name, server.class_name || ''),
+    archived: pickv(!!local.archived, !!base.archived, !!server.archived),
+    data,
+  };
+}
+async function saveNote(toggleHidden = false) {
+  if (!noteEdit || isPast()) return;
+  const form = noteFormData();
+  if (!form.data.name) { showNoteError('학생 이름을 입력해주세요.'); return; }
+  if (toggleHidden && !confirm(noteEdit.archived ? '이 학생을 다시 목록에 보이게 할까요?' : '이 학생을 목록에서 숨길까요? (삭제되지 않고 "숨긴 학생"에서 다시 볼 수 있습니다)')) return;
+  let local = { ...form, archived: toggleHidden ? !noteEdit.archived : noteEdit.archived };
+  let base = noteEdit.base, version = noteEdit.version;
+  const btn = document.getElementById('note-save-btn');
+  btn.disabled = true; btn.textContent = '저장 중...';
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const r = await api({ dept: 'senior', season: YEAR, method: 'SAVE_NOTE', body: {
+        student_id: noteEdit.studentId, class_name: local.class_name, data: local.data,
+        archived: local.archived, version, updated_by: myDisplayName(),
+      }});
+      if (r.ok) {
+        const c = notesCache[YEAR] || (notesCache[YEAR] = { notes: [], loading: false, error: '' });
+        const saved = { student_id: noteEdit.studentId, class_name: local.class_name, data: local.data, archived: local.archived,
+          version: r.data.version, updated_at: r.data.updated_at || new Date().toISOString(), updated_by: myDisplayName() };
+        const i = c.notes.findIndex(n => n.student_id === saved.student_id);
+        if (i === -1) c.notes.push(saved); else c.notes[i] = saved;
+        closeNoteModal();
+        showToast(toggleHidden ? (saved.archived ? '목록에서 숨겼습니다' : '다시 보이게 했습니다') : '저장했습니다');
+        renderNotes();
+        return;
+      }
+      if (r.status === 409 && r.data.conflict) {
+        const server = r.data.note || { class_name: '', data: {}, archived: false, version: 0 };
+        local = mergeNote(base, local, server);
+        base = { class_name: server.class_name || '', data: server.data || {}, archived: !!server.archived };
+        version = server.version || 0;
+        continue;
+      }
+      showNoteError(r.data.code === 'notes_table_missing'
+        ? '서버에 학생 특이사항 저장 공간이 아직 없어 저장하지 못했습니다. 관리자에게 알려주세요. (쓴 내용은 창을 닫기 전까지 그대로 있습니다)'
+        : `저장하지 못했습니다: ${r.data.error || ('HTTP ' + r.status)} (쓴 내용은 창을 닫기 전까지 그대로 있습니다)`);
+      return;
+    }
+    showNoteError('다른 선생님과 동시에 저장 중입니다. 잠시 후 다시 눌러주세요.');
+  } finally {
+    btn.disabled = false; btn.textContent = '저장';
+  }
+}
+function toggleNoteHidden() { saveNote(true); }
 
 /* ══════ 미입력 현황 (관리자) ══════ */
 let missDept = 'senior', missMonth = 0, missWeek = 0, missLoading = false, missNote = '';
@@ -2430,6 +2744,29 @@ function printReport() {
   </div>
 </div>
 
+<!-- ══════ 학생 특이사항 작성 창 (중고등부) ══════ -->
+<div class="modal-overlay" id="note-modal">
+  <div class="modal" style="max-width:560px">
+    <h2 id="note-title">학생 특이사항</h2>
+    <div class="sub" id="note-sub"></div>
+    <label class="field-label" for="note-name">학생명</label>
+    <input class="field-input" id="note-name" type="text" maxlength="30" placeholder="예: 김OO" />
+    <label class="field-label" for="note-class">분반</label>
+    <select class="field-input" id="note-class"></select>
+    <label class="field-label" for="note-teacher">분반교사</label>
+    <input class="field-input" id="note-teacher" type="text" maxlength="60" placeholder="예: 홍길동t, 김철수t" />
+    <div id="note-questions"></div>
+    <label class="field-label" for="note-memo">7. 기타 특이사항 자유롭게 작성해주세요</label>
+    <textarea class="field-input note-memo-input" id="note-memo" rows="8" maxlength="4000" placeholder="- 신앙생활 모습&#10;- 성격, 친구 관계&#10;- 선생님이 알아두면 좋은 점"></textarea>
+    <div class="error-msg hidden" id="note-error" style="margin-top:0"></div>
+    <div class="modal-footer">
+      <button class="btn btn-pink hidden" id="note-hide-btn" onclick="toggleNoteHidden()">숨기기</button>
+      <button class="btn btn-ghost" onclick="closeNoteModal()">닫기</button>
+      <button class="btn btn-sky" id="note-save-btn" onclick="saveNote()">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════ 미입력 현황 모달 (관리자) ══════ -->
 <div class="modal-overlay" id="missing-modal">
   <div class="modal" style="max-width:520px">
@@ -2466,6 +2803,14 @@ document.getElementById('pin-modal').addEventListener('click', function(e){ if(e
 document.getElementById('settings-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeSettingsModal(); });
 document.getElementById('report-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeReportModal(); });
 document.getElementById('missing-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeMissingModal(); });
+document.getElementById('note-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeNoteModal(); });
+// 특이사항 선택지: 누를 때마다 선택 ↔ 해제 (한 문항에 하나만)
+document.getElementById('note-questions').addEventListener('click', function(e){
+  const opt = e.target.closest('.opt'); if (!opt || opt.disabled) return;
+  const wasOn = opt.classList.contains('on');
+  opt.parentElement.querySelectorAll('.opt').forEach(o => o.classList.remove('on'));
+  if (!wasOn) opt.classList.add('on');
+});
 </script>
 
 <style>
