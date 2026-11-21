@@ -259,6 +259,7 @@
   #app-screen.notes-mode #teacher-selector-wrap,#app-screen.notes-mode #month-tabs-wrap,
   #app-screen.notes-mode #main-card,#app-screen.notes-mode #stats-panel{display:none!important;}
   .notes-back{margin-bottom:10px;}
+  .notes-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:12px;}
   .notes-intro{padding:14px;margin-bottom:12px;}
   .notes-intro-head{display:flex;align-items:center;gap:10px;}
   .notes-intro-head > div{flex:1;min-width:0;}
@@ -2231,7 +2232,10 @@ function renderNotes() {
           <div class="notes-title">학생 특이사항</div>
           <div class="notes-sub">${past ? `${viewYear}년에 작성한 내용입니다. 조회만 가능합니다.` : '내년 담당 선생님께 학생의 특징을 넘겨주는 곳입니다. 중고등부 선생님 모두 볼 수 있습니다.'}</div>
         </div>
+      </div>
+      <div class="notes-actions">
         ${past ? '' : '<button class="btn btn-sky" onclick="openNoteModal()">학생 추가</button>'}
+        <button class="btn" onclick="downloadNotes()"${shown.length ? '' : ' disabled'}>엑셀 다운로드</button>
       </div>
     </div>
     ${c.error ? `<div class="save-error"><span>${esc(c.error)}</span><button class="btn btn-sm btn-pink" onclick="delete notesCache[viewYear]; renderNotes()">다시 시도</button></div>` : ''}
@@ -2239,6 +2243,28 @@ function renderNotes() {
     ${hiddenNotes.length ? `<div class="notes-hidden-toggle"><button class="btn btn-sm" onclick="notesShowHidden=!notesShowHidden; renderNotes()">숨긴 학생 ${hiddenNotes.length}명 ${notesShowHidden ? '접기' : '보기'}</button></div>` : ''}
     ${notesShowHidden ? pick(hiddenNotes).map(card).join('') : ''}`;
   el.querySelectorAll('[data-sid]').forEach(b => { b.onclick = () => openNoteModal(b.dataset.sid); });
+}
+
+/* ── 전체 취합본 엑셀 다운로드 (숨긴 학생 제외, 분반 순서 → 이름 순서) ── */
+function downloadNotes() {
+  const c = notesCache[viewYear];
+  const list = c ? c.notes.filter(n => !n.archived)
+    .sort((a, b) => noteClassOrder(a) - noteClassOrder(b) || String(a.data.name).localeCompare(String(b.data.name), 'ko')) : [];
+  if (!list.length) { showToast('내려받을 학생 특이사항이 없습니다'); return; }
+  if (typeof XLSX === 'undefined') { showToast('엑셀 도구를 불러오지 못했습니다. 인터넷 연결 후 새로고침해주세요'); return; }
+  const header = ['분반', '학생명', '분반교사', ...NOTE_QUESTIONS.map(q => q.label), '7. 기타 특이사항', '마지막 수정', '수정일'];
+  const rows = list.map(n => {
+    const d = n.data || {};
+    const day = new Date(n.updated_at);
+    return [n.class_name || '', d.name || '', d.teacher || '', ...NOTE_QUESTIONS.map(q => d[q.key] || ''), d.memo || '',
+      n.updated_by || '', isNaN(day) ? '' : `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`];
+  });
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  ws['!cols'] = [{ wch: 13 }, { wch: 10 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 60 }, { wch: 10 }, { wch: 11 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '전체');
+  XLSX.writeFile(wb, `${viewYear}년 중고등부 학생 특이사항.xlsx`);
+  showToast(`${list.length}명 엑셀 파일을 내려받습니다`);
 }
 
 /* ── 특이사항 작성 창 ── */
