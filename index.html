@@ -264,7 +264,6 @@
   .notes-intro-head > div{flex:1;min-width:0;}
   .notes-title{font-family:var(--title);font-size:22px;line-height:1.2;}
   .notes-sub{font-size:13px;color:var(--sub);margin-top:2px;}
-  .tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;border:1.5px solid var(--ink);background:var(--green);font-size:11px;font-weight:700;}
   .note-card{display:block;width:100%;text-align:left;padding:14px;margin-bottom:10px;cursor:pointer;font-family:inherit;color:var(--ink);}
   .note-card.archived{opacity:.6;border-style:dashed;}
   .note-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
@@ -1467,7 +1466,7 @@ async function loginTeacher() {
 }
 function logout() {
   if (isPast()) enterCurrentSeason();
-  viewMode = 'check'; notesCache = {}; notesFilter = '전체'; closeNoteModal();
+  viewMode = 'check'; notesCache = {}; closeNoteModal();
   session = {role:null, teacherIdx:null, teacherId:null};
   ['admin-pw-input','teacher-pin-input'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('error'); });
   ['admin-error','teacher-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -2158,7 +2157,6 @@ const NOTE_QUESTIONS = [
 ];
 let viewMode = 'check';      // 'check' = 체크리스트, 'notes' = 학생 특이사항
 let notesCache = {};         // 회기 → { notes, loading, error }
-let notesFilter = '전체';
 let notesShowHidden = false;
 let noteEdit = null;         // 편집 중인 학생 { studentId, isNew, version, base, archived }
 
@@ -2209,12 +2207,8 @@ function renderNotes() {
   }
   const shown = c.notes.filter(n => !n.archived);
   const hiddenNotes = c.notes.filter(n => n.archived);
-  const classes = [...NOTE_CLASSES];
-  c.notes.forEach(n => { if (n.class_name && !classes.includes(n.class_name)) classes.push(n.class_name); });
-  if (notesFilter !== '전체' && !classes.includes(notesFilter)) notesFilter = '전체';
-  const count = cls => shown.filter(n => (n.class_name || '미정') === cls).length;
-  const pick = list => list
-    .filter(n => notesFilter === '전체' || (n.class_name || '미정') === notesFilter)
+  // 분반 순서 → 이름 순서로 정렬해서 한 목록으로 보여줌
+  const pick = list => [...list]
     .sort((a, b) => noteClassOrder(a) - noteClassOrder(b) || String(a.data.name).localeCompare(String(b.data.name), 'ko'));
 
   const card = n => {
@@ -2241,17 +2235,10 @@ function renderNotes() {
       </div>
     </div>
     ${c.error ? `<div class="save-error"><span>${esc(c.error)}</span><button class="btn btn-sm btn-pink" onclick="delete notesCache[viewYear]; renderNotes()">다시 시도</button></div>` : ''}
-    <div class="month-tabs-wrap"><div class="month-tabs">
-      <button class="m-tab${notesFilter === '전체' ? ' active' : ''}" data-filter="전체">전체 ${shown.length}</button>
-      ${classes.map(cls => `<button class="m-tab${notesFilter === cls ? ' active' : ''}" data-filter="${esc(cls)}">${esc(cls)}${count(cls) ? ` <span class="tab-count">${count(cls)}</span>` : ''}</button>`).join('')}
-    </div></div>
-    ${list.length ? list.map(card).join('') : `<div class="card notes-empty">${c.error ? '' : (past ? '작성된 특이사항이 없습니다.' : (notesFilter === '전체' ? '아직 작성된 학생이 없습니다.<br>위의 "학생 추가"를 눌러 시작하세요.' : '이 분반에 작성된 학생이 없습니다.'))}</div>`}
+    ${list.length ? list.map(card).join('') : `<div class="card notes-empty">${c.error ? '' : (past ? '작성된 특이사항이 없습니다.' : '아직 작성된 학생이 없습니다.<br>위의 "학생 추가"를 눌러 시작하세요.')}</div>`}
     ${hiddenNotes.length ? `<div class="notes-hidden-toggle"><button class="btn btn-sm" onclick="notesShowHidden=!notesShowHidden; renderNotes()">숨긴 학생 ${hiddenNotes.length}명 ${notesShowHidden ? '접기' : '보기'}</button></div>` : ''}
     ${notesShowHidden ? pick(hiddenNotes).map(card).join('') : ''}`;
-  el.querySelectorAll('[data-filter]').forEach(b => { b.onclick = () => { notesFilter = b.dataset.filter; renderNotes(); }; });
   el.querySelectorAll('[data-sid]').forEach(b => { b.onclick = () => openNoteModal(b.dataset.sid); });
-  const sel = el.querySelector('.m-tab.active');
-  if (sel) centerActiveTab(sel.parentElement.parentElement, '.m-tab.active');
 }
 
 /* ── 특이사항 작성 창 ── */
@@ -2276,7 +2263,7 @@ function fillNoteForm(note) {
   const classes = [...NOTE_CLASSES];
   if (note && note.class_name && !classes.includes(note.class_name)) classes.push(note.class_name);
   classSel.innerHTML = '<option value="">분반 선택</option>' + classes.map(c => `<option>${esc(c)}</option>`).join('');
-  classSel.value = (note && note.class_name) || (notesFilter !== '전체' ? notesFilter : '');
+  classSel.value = (note && note.class_name) || '';
   document.getElementById('note-questions').innerHTML = NOTE_QUESTIONS.map(q => `
     <div class="note-q" data-q="${q.key}">
       <div class="field-label">${esc(q.label)}</div>
