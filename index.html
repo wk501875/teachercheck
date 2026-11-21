@@ -119,7 +119,8 @@
   .top-name{font-weight:700;font-size:18px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .top-sub{font-size:13px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .role{display:none;}
-  .top-status{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;max-width:45%;}
+  .top-status{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:2px 12px;margin:-4px 0 8px;}
+  #btn-notes{flex-shrink:0;}
   .save-status,.sync-status{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);white-space:nowrap;}
   .save-status::before,.sync-status::before{content:'';width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink);background:var(--card);flex-shrink:0;}
   .save-status.saved::before,.sync-status.synced::before{background:var(--green);}
@@ -253,11 +254,11 @@
   .lock-grid .btn{padding:0 4px;font-size:13px;}
 
   /* ── 학생 특이사항 (중고등부) ── */
-  .view-switch{margin-bottom:12px;}
   .notes-view{display:none;}
   #app-screen.notes-mode .notes-view{display:block;}
   #app-screen.notes-mode #teacher-selector-wrap,#app-screen.notes-mode #month-tabs-wrap,
   #app-screen.notes-mode #main-card,#app-screen.notes-mode #stats-panel{display:none!important;}
+  .notes-back{margin-bottom:10px;}
   .notes-intro{padding:14px;margin-bottom:12px;}
   .notes-intro-head{display:flex;align-items:center;gap:10px;}
   .notes-intro-head > div{flex:1;min-width:0;}
@@ -375,10 +376,12 @@
         <div class="top-name" id="top-user-name">-</div>
         <div class="top-sub"><span id="top-sub">-</span><span class="role" id="top-role-badge"></span></div>
       </div>
-      <div class="top-status">
-        <div class="save-status" id="save-status">자동저장</div>
-        <div class="sync-status hidden" id="sync-status">동기화 중</div>
-      </div>
+      <!-- 중고등부만: 학생 특이사항 화면으로 들어가는 버튼 -->
+      <button class="btn btn-sm btn-gold hidden" id="btn-notes" onclick="setViewMode(viewMode === 'notes' ? 'check' : 'notes')">학생 특이사항</button>
+    </div>
+    <div class="top-status">
+      <div class="save-status" id="save-status">자동저장</div>
+      <div class="sync-status hidden" id="sync-status">동기화 중</div>
     </div>
     <div class="top-actions">
       <button class="btn btn-sm" id="btn-file-save" onclick="exportData()">파일 저장</button>
@@ -407,13 +410,6 @@
     <span class="season-notice hidden" id="season-notice">지난해 기록은 조회만 가능합니다</span>
   </div>
 
-  <!-- 중고등부만: 체크리스트 / 학생 특이사항 전환 -->
-  <div class="view-switch hidden" id="view-switch">
-    <div class="seg">
-      <button class="btn btn-sky" id="view-check" onclick="setViewMode('check')">체크리스트</button>
-      <button class="btn" id="view-notes" onclick="setViewMode('notes')">학생 특이사항</button>
-    </div>
-  </div>
   <div id="notes-view" class="notes-view"></div>
 
   <div class="teacher-wrap card hidden" id="teacher-selector-wrap">
@@ -2070,12 +2066,13 @@ function render(opts = {}) {
   const center = !!opts.center;
   updateTopSub();
   const y = window.scrollY; // 다시 그려도 세로 스크롤 위치는 그대로
-  // 중고등부만: 체크리스트 / 학생 특이사항 전환
+  // 중고등부만: 오른쪽 위 "학생 특이사항" 버튼으로 별도 화면 열기
   if (!notesAvailable()) viewMode = 'check';
   const notesOn = viewMode === 'notes';
-  document.getElementById('view-switch').classList.toggle('hidden', !notesAvailable());
-  document.getElementById('view-check').className = 'btn' + (notesOn ? '' : ' btn-sky');
-  document.getElementById('view-notes').className = 'btn' + (notesOn ? ' btn-sky' : '');
+  const notesBtn = document.getElementById('btn-notes');
+  notesBtn.classList.toggle('hidden', !notesAvailable());
+  notesBtn.className = 'btn btn-sm ' + (notesOn ? 'btn-sky' : 'btn-gold') + (notesAvailable() ? '' : ' hidden');
+  notesBtn.textContent = notesOn ? '체크리스트' : '학생 특이사항';
   document.getElementById('app-screen').classList.toggle('notes-mode', notesOn);
   if (notesOn) {
     renderNotes();
@@ -2175,9 +2172,11 @@ function myDisplayName() {
 }
 function setViewMode(mode) {
   if (mode === 'notes' && !notesAvailable()) mode = 'check';
-  if (mode === 'notes' && viewMode !== 'notes') delete notesCache[viewYear]; // 들어올 때마다 최신 내용
+  const changed = mode !== viewMode;
+  if (mode === 'notes' && changed) delete notesCache[viewYear]; // 들어올 때마다 최신 내용
   viewMode = mode;
   render({ center: mode === 'check' });
+  if (changed) window.scrollTo(0, 0); // 화면이 바뀔 때는 맨 위부터
 }
 async function loadNotes(season) {
   const c = notesCache[season] = { notes: [], loading: true, error: '' };
@@ -2231,6 +2230,7 @@ function renderNotes() {
   };
   const list = pick(shown);
   el.innerHTML = `
+    <div class="notes-back"><button class="btn btn-sm" onclick="setViewMode('check')"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>체크리스트로 돌아가기</button></div>
     <div class="card notes-intro">
       <div class="notes-intro-head">
         <div>
