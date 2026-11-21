@@ -269,21 +269,58 @@ async function handleGetNotes(season) {
   if (!r.ok) throw new HttpError(502, `Supabase GET failed: ${r.status}`);
   return json({ notes: r.data || [] });
 }
+// 저장하는 사람 확인: 선생님은 PIN, 관리자는 관리자 비밀번호 (현재 회기 중고등부 명단 기준)
+async function noteActor(season, p) {
+  const row = await getRoster('senior', season);
+  if (!row) throw rowMissingError('senior', season);
+  const id = String(p.actor_id || ''), secret = String(p.actor_secret || '');
+  if (id === 'admin') {
+    if (row.admin_pw && secret === String(row.admin_pw)) return { id: 'admin', name: '관리자', admin: true };
+  } else {
+    const t = ensureIds(row.teachers).find(x => x.id === id);
+    if (t && secret === String(t.pin || '')) return { id: t.id, name: String(t.name || ''), admin: false };
+  }
+  throw new HttpError(403, '로그인 정보가 맞지 않습니다. 다시 로그인해주세요.', { code: 'not_authorized' });
+}
+// 작성한 선생님 본인과 관리자만 수정 가능 (작성자 정보가 없는 예전 기록은 마지막으로 저장한 선생님을 작성자로 봄)
+function canEditNote(note, actor) {
+  if (actor.admin) return true;
+  const d = (note && note.data) || {};
+  if (d.owner_id) return d.owner_id === actor.id;
+  return !!note && note.updated_by === actor.name;
+}
+
 async function handleSaveNote(season, p) {
   if (!p || !ID_RE.test(String(p.student_id))) throw new HttpError(400, 'Invalid student id');
   const version = Number(p.version);
   if (!Number.isInteger(version) || version < 0) throw new HttpError(400, 'Invalid version');
+  const actor = await noteActor(season, p);
   const src = p.data && typeof p.data === 'object' ? p.data : {};
   const data = {};
   NOTE_FIELDS.forEach(k => { data[k] = String(src[k] ?? '').slice(0, k === 'memo' ? 4000 : 60); });
   if (!data.name.trim()) throw new HttpError(400, '학생 이름을 입력해주세요.');
+  if (version === 0) {
+    // 새로 작성: 저장하는 사람이 작성자
+    data.owner_id = actor.id; data.owner_name = actor.name;
+  } else {
+    const existing = await getNote(season, p.student_id);
+    if (existing) {
+      if (!canEditNote(existing, actor)) {
+        throw new HttpError(403, '다른 선생님이 작성한 특이사항은 수정할 수 없습니다.', { code: 'not_owner' });
+      }
+      const ed = existing.data || {};
+      data.owner_id = ed.owner_id || (actor.admin ? '' : actor.id);
+      data.owner_name = ed.owner_name || (actor.admin ? '' : actor.name);
+    }
+  }
   const fields = {
     class_name: String(p.class_name || '').slice(0, 30),
     data,
     archived: !!p.archived,
-    updated_by: String(p.updated_by || '').slice(0, 30),
+    updated_by: actor.name,
     updated_at: new Date().toISOString(),
   };
+  const okBody = v => json({ ok: true, version: v, updated_at: fields.updated_at, updated_by: actor.name, owner_id: data.owner_id || '', owner_name: data.owner_name || '' });
   if (version === 0) {
     const r = await sb(NOTES_TABLE, {
       method: 'POST',
@@ -291,7 +328,7 @@ async function handleSaveNote(season, p) {
       body: JSON.stringify({ season: String(season), dept: 'senior', student_id: p.student_id, ...fields, version: 1 }),
     });
     if (isMissingTable(r)) throw notesMissingError();
-    if (r.ok) return json({ ok: true, version: 1, updated_at: fields.updated_at });
+    if (r.ok) return okBody(1);
     if (r.status !== 409) throw new HttpError(502, `Supabase POST failed: ${r.status} ${r.text}`);
   } else {
     const r = await sb(`${NOTES_TABLE}?season=eq.${season}&dept=eq.senior&student_id=eq.${p.student_id}&version=eq.${version}`, {
@@ -301,7 +338,7 @@ async function handleSaveNote(season, p) {
     });
     if (isMissingTable(r)) throw notesMissingError();
     if (!r.ok) throw new HttpError(502, `Supabase PATCH failed: ${r.status} ${r.text}`);
-    if (r.data && r.data.length) return json({ ok: true, version: version + 1, updated_at: fields.updated_at });
+    if (r.data && r.data.length) return okBody(version + 1);
   }
   // 다른 선생님이 먼저 저장함 → 최신 내용을 돌려주고 화면에서 바뀐 칸만 합쳐 다시 저장
   return json({ conflict: true, note: await getNote(season, p.student_id) }, 409);

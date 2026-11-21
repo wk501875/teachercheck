@@ -286,7 +286,22 @@
   .opt:disabled:not(.on){color:var(--sub);border-color:var(--line);}
   .note-memo-input{min-height:160px;resize:vertical;line-height:1.6;}
   /* 학생 이름이 들어가는 제목은 본문 글꼴 */
-  #note-title{font-family:inherit;font-weight:700;}
+  #note-title,#note-view-title{font-family:inherit;font-weight:700;}
+  .note-meta b{font-weight:700;color:var(--ink);}
+  /* 상세보기 */
+  .nv-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+  .nv-head h2{margin-bottom:0;}
+  .nv-row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1.5px solid var(--line);font-size:14px;}
+  .nv-label{color:var(--sub);}
+  .nv-value{text-align:right;}
+  .nv-value b{font-weight:700;}
+  .nv-memo-label{font-size:13px;font-weight:600;color:var(--sub);margin:14px 0 6px;}
+  .nv-memo{border:1.5px solid var(--ink);border-radius:16px;background:var(--bg);padding:12px 14px;font-size:15px;line-height:1.7;white-space:pre-wrap;word-break:break-word;}
+  .nv-empty{color:var(--sub);}
+  .nv-meta{font-size:12px;color:var(--sub);margin-top:10px;}
+  /* 내용이 길어도 닫기·수정 버튼은 창 아래에 항상 보이게 */
+  #note-view-modal .modal-footer{position:sticky;bottom:-22px;background:var(--card);margin:12px 0 -22px;padding:12px 0 22px;border-top:1.5px solid var(--line);}
+  .nv-readonly{font-size:13px;font-weight:600;background:var(--sky-soft);border:1.5px solid var(--ink);border-radius:14px;padding:8px 12px;margin-top:12px;}
 
   /* ── 미입력 현황 ── */
   .miss-weeks{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
@@ -916,13 +931,13 @@ function buildDemoDB() {
   const stamp = new Date(now.getTime() - 86400000).toISOString();
   db.notes = { [YEAR]: [
     { student_id: 'ds_1', class_name: '중등형제 1반', archived: false, version: 1, updated_at: stamp, updated_by: '장시우',
-      data: { name: '가나다', teacher: '장시우t, 한주원t', salvation: '예', family: '부모님과 함께', sunday: '100%', saturday: '70%', attitude: '상', personality: '외향적',
+      data: { owner_id: 'd_1', owner_name: '장시우', name: '가나다', teacher: '장시우t, 한주원t', salvation: '예', family: '부모님과 함께', sunday: '100%', saturday: '70%', attitude: '상', personality: '외향적',
         memo: '- 밝고 친구들과 잘 어울림\n- 운동을 좋아해서 토요교제 출석이 들쭉날쭉함\n- 칭찬해주면 더 열심히 하는 편' } },
     { student_id: 'ds_2', class_name: '중등형제 1반', archived: false, version: 1, updated_at: stamp, updated_by: '장시우',
-      data: { name: '라마바', teacher: '장시우t, 한주원t', salvation: '아니오', family: '어머니', sunday: '50%', saturday: '30%', attitude: '중', personality: '내성적',
+      data: { owner_id: 'd_1', owner_name: '장시우', name: '라마바', teacher: '장시우t, 한주원t', salvation: '아니오', family: '어머니', sunday: '50%', saturday: '30%', attitude: '중', personality: '내성적',
         memo: '- 올해 이사 와서 아직 적응 중\n- 먼저 말을 걸어주면 잘 대답함\n- 기도하며 기다려주는 것이 필요해 보임' } },
     { student_id: 'ds_3', class_name: '고등자매 2반', archived: false, version: 1, updated_at: stamp, updated_by: '임하은',
-      data: { name: '사아자', teacher: '임하은t', salvation: '예', family: '혼자', sunday: '70%', saturday: '50%', attitude: '상', personality: '보통',
+      data: { owner_id: 'd_2', owner_name: '임하은', name: '사아자', teacher: '임하은t', salvation: '예', family: '혼자', sunday: '70%', saturday: '50%', attitude: '상', personality: '보통',
         memo: '- 혼자 교회에 나옴, 가족 전도에 마음이 있음\n- 책임감이 강하고 맡은 일을 잘 해냄' } },
   ], [PAST_YEAR]: [] };
   return db;
@@ -946,12 +961,25 @@ async function demoApi(p) {
   if (p.season !== YEAR) return fail(403, { error: '지난해 기록은 조회만 가능합니다', code: 'season_closed' });
   const b = p.body || {};
   if (p.method === 'SAVE_NOTE') {
+    // 실제 서버와 같은 규칙: PIN/관리자 비밀번호 확인, 작성자 본인과 관리자만 수정
+    const sen = demoDB.senior;
+    const actor = b.actor_id === 'admin'
+      ? (b.actor_secret === demoDB.adminPw ? { id: 'admin', name: '관리자', admin: true } : null)
+      : (t => (t && t.pin === b.actor_secret) ? { id: t.id, name: t.name, admin: false } : null)(sen.teachers.find(t => t.id === b.actor_id));
+    if (!actor) return fail(403, { error: '로그인 정보가 맞지 않습니다.', code: 'not_authorized' });
     const list = demoDB.notes[YEAR], cur = list.find(n => n.student_id === b.student_id), v = cur ? cur.version : 0;
     if (b.version !== v) return fail(409, { conflict: true, note: cur ? clone(cur) : null });
-    const saved = { student_id: b.student_id, class_name: b.class_name || '', data: clone(b.data || {}), archived: !!b.archived,
-      version: v + 1, updated_at: new Date().toISOString(), updated_by: b.updated_by || '' };
+    const data = clone(b.data || {});
+    if (cur) {
+      const od = cur.data || {};
+      const can = actor.admin || (od.owner_id ? od.owner_id === actor.id : cur.updated_by === actor.name);
+      if (!can) return fail(403, { error: '다른 선생님이 작성한 특이사항은 수정할 수 없습니다.', code: 'not_owner' });
+      data.owner_id = od.owner_id || ''; data.owner_name = od.owner_name || '';
+    } else { data.owner_id = actor.id; data.owner_name = actor.name; }
+    const saved = { student_id: b.student_id, class_name: b.class_name || '', data, archived: !!b.archived,
+      version: v + 1, updated_at: new Date().toISOString(), updated_by: actor.name };
     if (cur) Object.assign(cur, saved); else list.push(saved);
-    return ok({ ok: true, version: v + 1, updated_at: saved.updated_at });
+    return ok({ ok: true, version: v + 1, updated_at: saved.updated_at, updated_by: actor.name, owner_id: data.owner_id, owner_name: data.owner_name });
   }
   if (p.method === 'SAVE_RECORD') {
     const cur = db.records[b.teacher_id], v = cur ? cur.version : 0;
@@ -1452,7 +1480,8 @@ async function loginAdmin() {
   if (!match) { err.classList.remove('hidden'); document.getElementById('admin-pw-input').classList.add('error'); return; }
   err.classList.add('hidden');
   document.getElementById('admin-pw-input').classList.remove('error');
-  session = {role:'admin', teacherIdx:null, teacherId:null}; activeTeacher = 0; showApp();
+  // secret: 특이사항 저장 때 서버가 본인 확인에 사용 (메모리에만, 브라우저에 저장하지 않음)
+  session = {role:'admin', teacherIdx:null, teacherId:null, secret: pw}; activeTeacher = 0; showApp();
 }
 async function loginTeacher() {
   const sel = document.getElementById('teacher-select-login');
@@ -1463,11 +1492,11 @@ async function loginTeacher() {
   const match = await pinMatches(pin, teachers[+ti].pin);
   if (!match) { err.classList.remove('hidden'); document.getElementById('teacher-pin-input').classList.add('error'); return; }
   err.classList.add('hidden');
-  session = {role:'teacher', teacherIdx:+ti, teacherId:teachers[+ti].id}; activeTeacher = +ti; showApp();
+  session = {role:'teacher', teacherIdx:+ti, teacherId:teachers[+ti].id, secret: pin}; activeTeacher = +ti; showApp();
 }
 function logout() {
   if (isPast()) enterCurrentSeason();
-  viewMode = 'check'; notesCache = {}; closeNoteModal();
+  viewMode = 'check'; notesCache = {}; closeNoteModal(); closeNoteDetail();
   session = {role:null, teacherIdx:null, teacherId:null};
   ['admin-pw-input','teacher-pin-input'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('error'); });
   ['admin-error','teacher-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -1616,6 +1645,7 @@ async function applyChangePin() {
     showToast('❌ PIN 변경 실패: ' + (r.data.error || `HTTP ${r.status}`)); return;
   }
   teachers[ti].pin = await hashPin(nw);
+  session.secret = nw;
   persistLocal(); closeChangePinModal(); showToast('✅ PIN이 변경되었습니다!');
 }
 
@@ -2220,7 +2250,7 @@ function renderNotes() {
       ${d.teacher ? `<div class="note-teacher">분반교사 ${esc(d.teacher)}</div>` : ''}
       ${chips ? `<div class="note-chips">${chips}</div>` : ''}
       ${d.memo ? `<div class="note-memo">${esc(d.memo)}</div>` : ''}
-      <div class="note-meta">${n.archived ? '숨긴 학생 · ' : ''}마지막 수정 ${esc(n.updated_by || '-')} · ${noteDateText(n.updated_at)}</div>
+      <div class="note-meta">${n.archived ? '숨긴 학생 · ' : ''}작성 ${esc(noteOwnerName(n))} · ${noteDateText(n.updated_at)}${canEditNote(n) ? ' · <b>내가 수정 가능</b>' : ''}</div>
     </button>`;
   };
   const list = pick(shown);
@@ -2242,7 +2272,7 @@ function renderNotes() {
     ${list.length ? list.map(card).join('') : `<div class="card notes-empty">${c.error ? '' : (past ? '작성된 특이사항이 없습니다.' : '아직 작성된 학생이 없습니다.<br>위의 "학생 추가"를 눌러 시작하세요.')}</div>`}
     ${hiddenNotes.length ? `<div class="notes-hidden-toggle"><button class="btn btn-sm" onclick="notesShowHidden=!notesShowHidden; renderNotes()">숨긴 학생 ${hiddenNotes.length}명 ${notesShowHidden ? '접기' : '보기'}</button></div>` : ''}
     ${notesShowHidden ? pick(hiddenNotes).map(card).join('') : ''}`;
-  el.querySelectorAll('[data-sid]').forEach(b => { b.onclick = () => openNoteModal(b.dataset.sid); });
+  el.querySelectorAll('[data-sid]').forEach(b => { b.onclick = () => openNoteDetail(b.dataset.sid); }); // 카드 → 상세보기
 }
 
 /* ── 전체 취합본 엑셀 다운로드 (숨긴 학생 제외, 분반 순서 → 이름 순서) ── */
@@ -2265,6 +2295,53 @@ function downloadNotes() {
   XLSX.utils.book_append_sheet(wb, ws, '전체');
   XLSX.writeFile(wb, `${viewYear}년 중고등부 학생 특이사항.xlsx`);
   showToast(`${list.length}명 엑셀 파일을 내려받습니다`);
+}
+
+/* ── 수정 권한: 작성한 선생님 본인과 관리자만 (서버도 같은 규칙으로 확인) ── */
+function canEditNote(note) {
+  if (isPast() || !note) return false;
+  if (session.role === 'admin') return true;
+  const d = note.data || {};
+  if (d.owner_id) return d.owner_id === session.teacherId;
+  return note.updated_by === myDisplayName(); // 작성자 정보가 없는 예전 기록
+}
+function noteOwnerName(note) {
+  const d = (note && note.data) || {};
+  return d.owner_name || (d.owner_id ? '' : (note && note.updated_by)) || '-';
+}
+
+/* ── 상세보기 (누구나 보기만) ── */
+let noteViewId = null;
+function openNoteDetail(studentId) {
+  const c = notesCache[viewYear];
+  const note = c && c.notes.find(n => n.student_id === studentId);
+  if (!note) return;
+  noteViewId = studentId;
+  const d = note.data || {};
+  document.getElementById('note-view-title').textContent = d.name || '학생 특이사항';
+  document.getElementById('note-view-class').textContent = note.class_name || '분반 미정';
+  document.getElementById('note-view-body').innerHTML = `
+    <div class="nv-row"><span class="nv-label">분반교사</span><span class="nv-value">${esc(d.teacher || '-')}</span></div>
+    ${NOTE_QUESTIONS.map(q => `<div class="nv-row"><span class="nv-label">${esc(q.label)}</span><span class="nv-value">${d[q.key] ? `<b>${esc(d[q.key])}</b>` : '-'}</span></div>`).join('')}
+    <div class="nv-memo-label">7. 기타 특이사항</div>
+    <div class="nv-memo">${d.memo ? esc(d.memo) : '<span class="nv-empty">작성된 내용이 없습니다</span>'}</div>
+    <div class="nv-meta">작성 ${esc(noteOwnerName(note))} · 마지막 수정 ${esc(note.updated_by || '-')} · ${noteDateText(note.updated_at)}${note.archived ? ' · 숨긴 학생' : ''}</div>`;
+  const editBtn = document.getElementById('note-view-edit');
+  const can = canEditNote(note);
+  editBtn.classList.toggle('hidden', !can);
+  document.getElementById('note-view-readonly').classList.toggle('hidden', can || isPast());
+  const modal = document.getElementById('note-view-modal');
+  modal.classList.add('open');
+  modal.querySelector('.modal').scrollTop = 0;
+}
+function closeNoteDetail() {
+  document.getElementById('note-view-modal').classList.remove('open');
+  noteViewId = null;
+}
+function editFromDetail() {
+  const id = noteViewId;
+  closeNoteDetail();
+  if (id) openNoteModal(id);
 }
 
 /* ── 특이사항 작성 창 ── */
@@ -2299,6 +2376,7 @@ function fillNoteForm(note) {
 function openNoteModal(studentId) {
   const c = notesCache[viewYear];
   const note = studentId && c ? c.notes.find(n => n.student_id === studentId) : null;
+  if (studentId && !canEditNote(note)) { if (note) openNoteDetail(studentId); return; }
   const past = isPast();
   noteEdit = {
     studentId: note ? note.student_id : 's_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
@@ -2356,12 +2434,14 @@ async function saveNote(toggleHidden = false) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const r = await api({ dept: 'senior', season: YEAR, method: 'SAVE_NOTE', body: {
         student_id: noteEdit.studentId, class_name: local.class_name, data: local.data,
-        archived: local.archived, version, updated_by: myDisplayName(),
+        archived: local.archived, version,
+        actor_id: session.role === 'admin' ? 'admin' : session.teacherId, actor_secret: session.secret || '',
       }});
       if (r.ok) {
         const c = notesCache[YEAR] || (notesCache[YEAR] = { notes: [], loading: false, error: '' });
-        const saved = { student_id: noteEdit.studentId, class_name: local.class_name, data: local.data, archived: local.archived,
-          version: r.data.version, updated_at: r.data.updated_at || new Date().toISOString(), updated_by: myDisplayName() };
+        const saved = { student_id: noteEdit.studentId, class_name: local.class_name,
+          data: { ...local.data, owner_id: r.data.owner_id || '', owner_name: r.data.owner_name || '' }, archived: local.archived,
+          version: r.data.version, updated_at: r.data.updated_at || new Date().toISOString(), updated_by: r.data.updated_by || myDisplayName() };
         const i = c.notes.findIndex(n => n.student_id === saved.student_id);
         if (i === -1) c.notes.push(saved); else c.notes[i] = saved;
         closeNoteModal();
@@ -2378,6 +2458,8 @@ async function saveNote(toggleHidden = false) {
       }
       showNoteError(r.data.code === 'notes_table_missing'
         ? '서버에 학생 특이사항 저장 공간이 아직 없어 저장하지 못했습니다. 관리자에게 알려주세요. (쓴 내용은 창을 닫기 전까지 그대로 있습니다)'
+        : r.data.code === 'not_owner' ? '다른 선생님이 작성한 특이사항은 수정할 수 없습니다.'
+        : r.data.code === 'not_authorized' ? '로그인 정보가 바뀌었습니다. 로그아웃 후 다시 로그인해주세요. (쓴 내용은 창을 닫기 전까지 그대로 있습니다)'
         : `저장하지 못했습니다: ${r.data.error || ('HTTP ' + r.status)} (쓴 내용은 창을 닫기 전까지 그대로 있습니다)`);
       return;
     }
@@ -2757,6 +2839,19 @@ function printReport() {
   </div>
 </div>
 
+<!-- ══════ 학생 특이사항 상세보기 (누구나 보기만, 작성자·관리자에게만 수정 버튼) ══════ -->
+<div class="modal-overlay" id="note-view-modal">
+  <div class="modal" style="max-width:560px">
+    <div class="nv-head"><h2 id="note-view-title">학생</h2><span class="note-class" id="note-view-class"></span></div>
+    <div id="note-view-body"></div>
+    <div class="nv-readonly hidden" id="note-view-readonly">다른 선생님이 작성한 특이사항이라 보기만 할 수 있습니다.</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeNoteDetail()">닫기</button>
+      <button class="btn btn-sky hidden" id="note-view-edit" onclick="editFromDetail()">수정</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════ 학생 특이사항 작성 창 (중고등부) ══════ -->
 <div class="modal-overlay" id="note-modal">
   <div class="modal" style="max-width:560px">
@@ -2817,6 +2912,7 @@ document.getElementById('settings-modal').addEventListener('click', function(e){
 document.getElementById('report-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeReportModal(); });
 document.getElementById('missing-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeMissingModal(); });
 document.getElementById('note-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeNoteModal(); });
+document.getElementById('note-view-modal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeNoteDetail(); });
 // 특이사항 선택지: 누를 때마다 선택 ↔ 해제 (한 문항에 하나만)
 document.getElementById('note-questions').addEventListener('click', function(e){
   const opt = e.target.closest('.opt'); if (!opt || opt.disabled) return;
