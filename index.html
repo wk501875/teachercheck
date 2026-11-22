@@ -51,8 +51,8 @@
   .btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
 
   /* ── 되돌리기 ── */
-  .undo-bar{position:fixed;left:50%;bottom:76px;transform:translateX(-50%) translateY(120px);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 24px);width:max-content;background:var(--ink);color:var(--card);border-radius:999px;padding:6px 6px 6px 18px;font-size:14px;font-weight:600;z-index:9998;transition:transform .25s ease;}
-  .undo-bar.show{transform:translateX(-50%) translateY(0);}
+  .undo-bar{position:fixed;left:50%;bottom:76px;transform:translateX(-50%) translateY(calc(100% + 100px));visibility:hidden;opacity:0;pointer-events:none;display:flex;align-items:center;gap:10px;max-width:calc(100vw - 24px);width:max-content;background:var(--ink);color:var(--card);border-radius:999px;padding:6px 6px 6px 18px;font-size:14px;font-weight:600;z-index:9998;transition:transform .25s ease,opacity .25s ease,visibility 0s linear .25s;}
+  .undo-bar.show{transform:translateX(-50%) translateY(0);visibility:visible;opacity:1;pointer-events:auto;transition:transform .25s ease,opacity .25s ease,visibility 0s;}
   /* ── O/X 안내 ── */
   .ox-legend{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;font-size:13px;color:var(--ink);font-weight:600;margin:-2px 0 12px;}
   .ox-legend .lg{display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border:1.5px solid var(--ink);border-radius:999px;font-size:12px;font-weight:700;}
