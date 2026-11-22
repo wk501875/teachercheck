@@ -269,6 +269,81 @@ async function handleGetNotes(season) {
   if (!r.ok) throw new HttpError(502, `Supabase GET failed: ${r.status}`);
   return json({ notes: r.data || [] });
 }
+/* ── 관리자: 선생님을 다른 부서로 옮기기 (이름·PIN·올해 기록을 함께, 원래 부서의 기록은 지우지 않음) ── */
+async function requireAdmin(season, p) {
+  if (String(p.actor_id || '') === 'admin') {
+    for (const dept of ['senior', 'junior']) {
+      const row = await getRoster(dept, season);
+      if (row && row.admin_pw && String(p.actor_secret || '') === String(row.admin_pw)) return;
+    }
+  }
+  throw new HttpError(403, '관리자 비밀번호가 맞지 않습니다. 다시 로그인해주세요.', { code: 'not_authorized' });
+}
+async function handleMoveTeacher(from, season, p) {
+  if (!p || !ID_RE.test(String(p.teacher_id))) throw new HttpError(400, 'Invalid teacher id');
+  await requireAdmin(season, p);
+  const to = from === 'junior' ? 'senior' : 'junior';
+  const tid = String(p.teacher_id);
+  let copiedId = null; // 기록을 이미 복사한 새 ID (다시 시도할 때 같은 ID를 씀)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const src = await getRoster(from, season), dst = await getRoster(to, season);
+    if (!src) throw rowMissingError(from, season);
+    if (!dst) throw rowMissingError(to, season);
+    const srcT = ensureIds(src.teachers), dstT = ensureIds(dst.teachers);
+    const t = srcT.find(x => x.id === tid);
+    if (!t) throw new HttpError(404, '명단에 없는 선생님입니다. 화면을 새로고침해주세요.', { code: 'unknown_teacher' });
+
+    // 새 부서에서 쓸 ID: 그 부서 명단에도, 기록에도 없는 ID (원래 ID가 비어 있으면 그대로)
+    let newId = copiedId;
+    if (!newId) {
+      const { missing, records } = await getRecords(to, season);
+      if (missing) throw recordsMissingError();
+      const used = new Set([...dstT.map(x => x.id), ...records.map(x => x.teacher_id)]);
+      newId = tid;
+      while (used.has(newId)) newId = 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    }
+    if (dstT.some(x => x.id === newId)) { copiedId = null; continue; }
+
+    // 1) 기록 복사 (선생님별 기록이 없으면 예전 통째 저장분에서)
+    if (!copiedId) {
+      const rec = await getRecord(from, season, tid);
+      let state = rec ? rec.state : null;
+      if (!state) {
+        const li = legacyIndex(tid);
+        if (li >= 0 && Array.isArray(src.state) && src.state[li]) state = src.state[li];
+      }
+      if (state) {
+        const w = await sb(RECORDS_TABLE, {
+          method: 'POST',
+          headers: { 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ season: String(season), dept: to, teacher_id: newId, state, version: 1, updated_at: new Date().toISOString() }),
+        });
+        if (isMissingTable(w)) throw recordsMissingError();
+        if (w.status === 409) continue; // 그사이 같은 ID가 생김 → 다른 ID로 다시
+        if (!w.ok) throw new HttpError(502, `Supabase POST failed: ${w.status} ${w.text}`);
+      }
+      copiedId = newId;
+    }
+
+    // 2) 새 부서 명단에 추가 (마지막으로 본 버전일 때만)
+    const added = await patchRosterIfVersion(to, season, dst.updated_at, {
+      teachers: [...dstT.map(x => ({ id: x.id, name: x.name, pin: x.pin })), { id: newId, name: t.name, pin: t.pin }],
+    });
+    if (!added) continue;
+
+    // 3) 원래 부서 명단에서 빼기 (그사이 바뀌었으면 다시 읽어서)
+    let removed = false;
+    for (let k = 0; k < 3 && !removed; k++) {
+      const cur = k === 0 ? src : await getRoster(from, season);
+      const left = ensureIds(cur.teachers).filter(x => x.id !== tid).map(x => ({ id: x.id, name: x.name, pin: x.pin }));
+      removed = !!(await patchRosterIfVersion(from, season, cur.updated_at, { teachers: left }));
+    }
+    if (!removed) throw new HttpError(409, `새 부서에는 추가됐지만 원래 부서 명단에서 빼지 못했습니다. 관리 화면에서 ${t.name} 선생님을 한 번 더 확인해주세요.`);
+    return json({ ok: true, to, new_id: newId, name: t.name });
+  }
+  throw new HttpError(409, '다른 저장과 겹쳤습니다. 잠시 후 다시 시도해주세요.');
+}
+
 // 저장하는 사람 확인: 선생님은 PIN, 관리자는 관리자 비밀번호 (현재 회기 중고등부 명단 기준)
 async function noteActor(season, p) {
   const row = await getRoster('senior', season);
@@ -387,7 +462,7 @@ export async function onRequestPost(context) {
       // 예전 화면의 "부서 전체 통째로 저장"은 더 이상 받지 않음
       return json({ error: '사이트가 업데이트되었습니다. 페이지를 새로고침 해주세요.', code: 'outdated_client', current_season: cur }, 410);
     }
-    if (!['SAVE_ROSTER', 'SET_PIN', 'SAVE_RECORD', 'SAVE_NOTE'].includes(method)) {
+    if (!['SAVE_ROSTER', 'SET_PIN', 'SAVE_RECORD', 'SAVE_NOTE', 'MOVE_TEACHER'].includes(method)) {
       return json({ error: 'Invalid method', current_season: cur }, 400);
     }
     // 쓰기는 회기를 밝힌 요청 + 현재 회기만 허용 (지난 회기·2026 원본 행은 절대 수정하지 않음)
@@ -399,6 +474,7 @@ export async function onRequestPost(context) {
     }
     if (method === 'SAVE_ROSTER') return await withSeason(handleSaveRoster(dept, cur, payload));
     if (method === 'SET_PIN') return await withSeason(handleSetPin(dept, cur, payload));
+    if (method === 'MOVE_TEACHER') return await withSeason(handleMoveTeacher(dept, cur, payload));
     if (method === 'SAVE_NOTE') {
       if (dept !== 'senior') return json({ error: '학생 특이사항은 중고등부만 사용합니다', current_season: cur }, 400);
       return await withSeason(handleSaveNote(cur, payload));
