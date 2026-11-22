@@ -127,6 +127,8 @@
   select.field-input{appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--ink) 50%),linear-gradient(135deg,var(--ink) 50%,transparent 50%);background-position:calc(100% - 20px) 50%,calc(100% - 14px) 50%;background-size:6px 6px;background-repeat:no-repeat;padding-right:36px;}
   .error-msg{font-size:13px;font-weight:600;color:#B4471F;margin-top:-10px;margin-bottom:14px;}
   .modal-footer{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px;}
+  .note-danger{margin-top:14px;padding-top:12px;border-top:1.5px dashed var(--line);display:flex;justify-content:flex-start;}
+  .note-danger .btn{color:#B4471F;border-color:#B4471F;}
   .seg{display:flex;gap:4px;padding:3px;border:1.5px solid var(--ink);border-radius:999px;background:var(--card);}
   .seg .btn{flex:1;border-color:transparent;background:transparent;min-height:44px;}
   .seg .btn.btn-sky,.seg .btn.btn-gold{border-color:var(--ink);}
@@ -1081,6 +1083,11 @@ async function demoApi(p) {
   if (p.method === 'GET_NOTES') return ok({ notes: clone(demoDB.notes[p.season] || []) });
   if (p.season !== YEAR) return fail(403, { error: '지난해 기록은 조회만 가능합니다', code: 'season_closed' });
   const b = p.body || {};
+  if (p.method === 'DELETE_NOTE') {
+    if (b.actor_id !== 'admin' || b.actor_secret !== demoDB.adminPw) return fail(403, { error: '관리자 비밀번호가 맞지 않습니다.', code: 'not_authorized' });
+    demoDB.notes[YEAR] = demoDB.notes[YEAR].filter(n => n.student_id !== b.student_id);
+    return ok({ ok: true });
+  }
   if (p.method === 'SAVE_NOTE') {
     // 실제 서버와 같은 규칙: PIN/관리자 비밀번호 확인, 작성자 본인과 관리자만 수정
     const sen = demoDB.senior;
@@ -1089,6 +1096,7 @@ async function demoApi(p) {
       : (t => (t && t.pin === b.actor_secret) ? { id: t.id, name: t.name, admin: false } : null)(sen.teachers.find(t => t.id === b.actor_id));
     if (!actor) return fail(403, { error: '로그인 정보가 맞지 않습니다.', code: 'not_authorized' });
     const list = demoDB.notes[YEAR], cur = list.find(n => n.student_id === b.student_id), v = cur ? cur.version : 0;
+    if (!cur && b.version > 0) return fail(410, { error: '관리자가 삭제한 학생 특이사항입니다.', code: 'note_deleted' });
     if (b.version !== v) return fail(409, { conflict: true, note: cur ? clone(cur) : null });
     const data = clone(b.data || {});
     if (cur) {
@@ -2484,6 +2492,7 @@ async function refreshNotes(manual) {
   const season = viewYear, c = notesCache[season];
   if (!c || c.loading) { if (manual) { delete notesCache[season]; renderNotes(); } return; }
   const btn = () => document.getElementById('notes-refresh-btn');
+  const started = Date.now();
   notesRefreshing = true;
   if (manual && btn()) { btn().disabled = true; btn().textContent = '불러오는 중...'; }
   const r = await api({ dept: 'senior', season, method: 'GET_NOTES' });
@@ -2491,9 +2500,13 @@ async function refreshNotes(manual) {
   if (btn()) { btn().disabled = false; btn().textContent = '새로고침'; }
   if (notesCache[season] !== c) return;
   if (!r.ok) { if (manual) showToast('새로 불러오지 못했습니다. 잠시 후 다시 눌러주세요.'); return; }
-  const map = new Map(c.notes.map(n => [n.student_id, n]));
-  (r.data.notes || []).forEach(n => { const cur = map.get(n.student_id); if (!cur || (n.version || 0) >= (cur.version || 0)) map.set(n.student_id, n); });
-  c.notes = [...map.values()]; c.error = ''; c.loadedAt = new Date();
+  // 서버 목록을 기준으로 (관리자가 삭제한 학생은 빠짐). 단, 불러오는 사이 이 화면에서 방금 저장한 내용은 유지
+  const local = new Map(c.notes.map(n => [n.student_id, n]));
+  const next = (r.data.notes || []).map(n => { const cur = local.get(n.student_id); return cur && (cur.version || 0) > (n.version || 0) ? cur : n; });
+  const ids = new Set(next.map(n => n.student_id));
+  c.notes.forEach(n => { if (!ids.has(n.student_id) && n._savedAt && n._savedAt > started) next.push(n); });
+  c.notes = next; c.error = ''; c.loadedAt = new Date();
+  if (notesOpenId && !ids.has(notesOpenId) && !c.notes.some(n => n.student_id === notesOpenId)) notesOpenId = null;
   if (viewMode === 'notes' && viewYear === season) {
     const s = document.getElementById('notes-search');
     if (s && document.activeElement === s && notesDrawList) notesDrawList(); // 검색 입력 중이면 키보드가 닫히지 않게 목록만
@@ -2736,6 +2749,7 @@ function openNoteModal(studentId) {
   const hideBtn = document.getElementById('note-hide-btn');
   hideBtn.classList.toggle('hidden', past || !note);
   hideBtn.textContent = noteEdit.archived ? '다시 보이기' : '숨기기';
+  document.getElementById('note-delete-wrap').classList.toggle('hidden', past || !note || session.role !== 'admin');
   modal.classList.add('open');
   modal.querySelector('.modal').scrollTop = 0;
 }
@@ -2792,11 +2806,16 @@ async function saveNote(toggleHidden = false) {
         const saved = { student_id: noteEdit.studentId, class_name: local.class_name,
           data: { ...local.data, owner_id: r.data.owner_id || '', owner_name: r.data.owner_name || '' }, archived: local.archived,
           version: r.data.version, updated_at: r.data.updated_at || new Date().toISOString(), updated_by: r.data.updated_by || myDisplayName() };
+        saved._savedAt = Date.now(); // 자동 새로고침과 겹쳐도 방금 저장한 내용이 빠지지 않게 (메모리에만)
         const i = c.notes.findIndex(n => n.student_id === saved.student_id);
         if (i === -1) c.notes.push(saved); else c.notes[i] = saved;
         closeNoteModal();
         showToast(toggleHidden ? (saved.archived ? '목록에서 숨겼습니다' : '다시 보이게 했습니다') : '저장했습니다');
         renderNotes();
+        return;
+      }
+      if (r.data.code === 'note_deleted' || (r.status === 409 && r.data.conflict && !r.data.note && version > 0)) {
+        showNoteError('관리자가 삭제한 학생 특이사항이라 저장할 수 없습니다. 필요하면 창을 닫고 "학생 추가"로 새로 작성해주세요.');
         return;
       }
       if (r.status === 409 && r.data.conflict) {
@@ -2819,6 +2838,35 @@ async function saveNote(toggleHidden = false) {
   }
 }
 function toggleNoteHidden() { saveNote(true); }
+// 관리자만: 학생 특이사항 완전히 삭제 (서버가 관리자 비밀번호 확인, 올해 기록만)
+async function deleteNote() {
+  if (!noteEdit || noteEdit.isNew || isPast() || session.role !== 'admin') return;
+  const c = notesCache[YEAR];
+  const note = c && c.notes.find(n => n.student_id === noteEdit.studentId);
+  const name = (note && note.data && note.data.name) || '이';
+  if (!confirm(`${name} 학생의 특이사항을 완전히 삭제할까요?\n삭제하면 되돌릴 수 없습니다.\n(목록에서만 빼려면 "숨기기"를 쓰세요)`)) return;
+  const btn = document.getElementById('note-delete-btn');
+  btn.disabled = true; btn.textContent = '삭제 중...';
+  try {
+    const r = await api({ dept: 'senior', season: YEAR, method: 'DELETE_NOTE', body: {
+      student_id: noteEdit.studentId, actor_id: 'admin', actor_secret: session.secret || '' } });
+    if (!r.ok) {
+      showNoteError(r.data.code === 'not_authorized' ? '관리자 비밀번호가 바뀌었습니다. 로그아웃 후 다시 로그인해주세요.'
+        : r.data.code === 'delete_not_allowed' ? 'Supabase에서 삭제 권한이 막혀 있어 지우지 못했습니다. (SQL 실행 필요)'
+        : r.data.code === 'season_closed' ? '지난해 기록은 지울 수 없습니다.'
+        : `삭제하지 못했습니다: ${r.data.error || ('HTTP ' + r.status)}`);
+      return;
+    }
+    const id = noteEdit.studentId;
+    if (c) c.notes = c.notes.filter(n => n.student_id !== id);
+    if (notesOpenId === id) notesOpenId = null;
+    closeNoteModal();
+    showToast('삭제했습니다');
+    renderNotes();
+  } finally {
+    btn.disabled = false; btn.textContent = '이 학생 특이사항 삭제';
+  }
+}
 
 /* ══════ 미입력 현황 (관리자) ══════ */
 let missDept = 'senior', missMonth = 0, missWeek = 0, missLoading = false, missNote = '';
@@ -3221,6 +3269,10 @@ function printReport() {
       <button class="btn btn-pink hidden" id="note-hide-btn" onclick="toggleNoteHidden()">숨기기</button>
       <button class="btn btn-ghost" onclick="requestCloseNoteModal()">닫기</button>
       <button class="btn btn-sky" id="note-save-btn" onclick="saveNote()">저장</button>
+    </div>
+    <!-- 관리자만: 완전히 삭제 (되돌릴 수 없음) -->
+    <div class="note-danger hidden" id="note-delete-wrap">
+      <button class="btn btn-sm" id="note-delete-btn" onclick="deleteNote()">이 학생 특이사항 삭제</button>
     </div>
   </div>
 </div>
