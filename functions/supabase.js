@@ -379,6 +379,7 @@ async function handleSaveNote(season, p) {
     data.owner_id = actor.id; data.owner_name = actor.name;
   } else {
     const existing = await getNote(season, p.student_id);
+    if (!existing) throw noteDeletedError(); // 관리자가 삭제한 학생: 다시 만들지 않음
     if (existing) {
       if (!canEditNote(existing, actor)) {
         throw new HttpError(403, '다른 선생님이 작성한 특이사항은 수정할 수 없습니다.', { code: 'not_owner' });
@@ -416,7 +417,33 @@ async function handleSaveNote(season, p) {
     if (r.data && r.data.length) return okBody(version + 1);
   }
   // 다른 선생님이 먼저 저장함 → 최신 내용을 돌려주고 화면에서 바뀐 칸만 합쳐 다시 저장
-  return json({ conflict: true, note: await getNote(season, p.student_id) }, 409);
+  const latest = await getNote(season, p.student_id);
+  if (!latest && version > 0) throw noteDeletedError();
+  return json({ conflict: true, note: latest }, 409);
+}
+function noteDeletedError() {
+  return new HttpError(410, '관리자가 삭제한 학생 특이사항입니다.', { code: 'note_deleted' });
+}
+
+/* ── 관리자만: 학생 특이사항 한 명 삭제 (올해 기록만, 되돌릴 수 없음) ──
+ * 이 사이트에서 데이터를 지우는 유일한 기능. 다른 표(명단·선생님 기록·2026 원본 행)는 지우지 않음 */
+async function handleDeleteNote(season, p) {
+  if (!p || !ID_RE.test(String(p.student_id))) throw new HttpError(400, 'Invalid student id');
+  await requireAdmin(season, p);
+  const r = await sb(`${NOTES_TABLE}?season=eq.${season}&dept=eq.senior&student_id=eq.${p.student_id}`, {
+    method: 'DELETE',
+    headers: { 'Prefer': 'return=representation' },
+  });
+  if (isMissingTable(r)) throw notesMissingError();
+  const blocked = () => new HttpError(403, 'Supabase에서 학생 특이사항 삭제 권한이 막혀 있습니다. 관리자가 SQL을 실행해야 합니다.', { code: 'delete_not_allowed' });
+  if (r.status === 401 || r.status === 403) throw blocked();
+  if (!r.ok) throw new HttpError(502, `Supabase DELETE failed: ${r.status} ${r.text}`);
+  if (!r.data || !r.data.length) {
+    // 지워진 행이 없음: 이미 없거나(정상) 권한이 막혀 있음
+    if (await getNote(season, p.student_id)) throw blocked();
+    return json({ ok: true, already: true });
+  }
+  return json({ ok: true });
 }
 
 export async function onRequestPost(context) {
@@ -462,7 +489,7 @@ export async function onRequestPost(context) {
       // 예전 화면의 "부서 전체 통째로 저장"은 더 이상 받지 않음
       return json({ error: '사이트가 업데이트되었습니다. 페이지를 새로고침 해주세요.', code: 'outdated_client', current_season: cur }, 410);
     }
-    if (!['SAVE_ROSTER', 'SET_PIN', 'SAVE_RECORD', 'SAVE_NOTE', 'MOVE_TEACHER'].includes(method)) {
+    if (!['SAVE_ROSTER', 'SET_PIN', 'SAVE_RECORD', 'SAVE_NOTE', 'DELETE_NOTE', 'MOVE_TEACHER'].includes(method)) {
       return json({ error: 'Invalid method', current_season: cur }, 400);
     }
     // 쓰기는 회기를 밝힌 요청 + 현재 회기만 허용 (지난 회기·2026 원본 행은 절대 수정하지 않음)
@@ -475,6 +502,10 @@ export async function onRequestPost(context) {
     if (method === 'SAVE_ROSTER') return await withSeason(handleSaveRoster(dept, cur, payload));
     if (method === 'SET_PIN') return await withSeason(handleSetPin(dept, cur, payload));
     if (method === 'MOVE_TEACHER') return await withSeason(handleMoveTeacher(dept, cur, payload));
+    if (method === 'DELETE_NOTE') {
+      if (dept !== 'senior') return json({ error: '학생 특이사항은 중고등부만 사용합니다', current_season: cur }, 400);
+      return await withSeason(handleDeleteNote(cur, payload));
+    }
     if (method === 'SAVE_NOTE') {
       if (dept !== 'senior') return json({ error: '학생 특이사항은 중고등부만 사용합니다', current_season: cur }, 400);
       return await withSeason(handleSaveNote(cur, payload));
