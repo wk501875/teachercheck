@@ -148,7 +148,7 @@
   .role{display:none;}
   .top-status{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:2px 12px;margin:-4px 0 8px;}
   #btn-notes{flex-shrink:0;}
-  .save-status,.sync-status{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);white-space:nowrap;}
+  .save-status,.sync-status{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:var(--sub);white-space:nowrap;}
   .save-status::before,.sync-status::before{content:'';width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink);background:var(--card);flex-shrink:0;}
   .save-status.saved::before,.sync-status.synced::before{background:var(--green);}
   .sync-status.syncing::before{background:var(--yellow);}
@@ -156,6 +156,8 @@
   .sync-status.error::before{background:var(--apricot);}
   .top-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:6px;}
   .top-actions .btn{padding:0 8px;font-size:13px;}
+  .top-actions:not(.show-more) .more-item{display:none;}
+  .top-actions .more-item{background:var(--sky-soft);}
   #file-input{display:none;}
 
   /* ── Server save error ── */
@@ -201,7 +203,7 @@
   .sum-label{font-size:13px;font-weight:600;color:var(--sub);}
   .sum-big{font-family:var(--title);font-size:32px;line-height:1.1;margin:2px 0;}
   .sum-big small{font-size:18px;margin-left:2px;}
-  .sum-detail{font-size:12px;color:var(--sub);}
+  .sum-detail{font-size:13px;color:var(--sub);font-weight:600;}
 
   /* ── 이번 달 전체 일괄 ── */
   .bulk-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
@@ -213,28 +215,31 @@
   .week-card.this-week{background:var(--sky-soft);}
   .week-head{display:flex;align-items:center;gap:6px;padding:0 4px;margin-bottom:8px;}
   .week-title{font-family:var(--title);font-size:18px;white-space:nowrap;}
-  .week-range{font-size:13px;font-weight:600;color:var(--sub);white-space:nowrap;}
+  .week-range{font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;}
   .this-week-tag{font-size:12px;font-weight:700;background:var(--sky);border:1.5px solid var(--ink);border-radius:999px;padding:1px 8px;white-space:nowrap;}
   .week-bulk{display:flex;gap:4px;margin-left:auto;flex-shrink:0;}
-  .rbtn{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--ink);background:var(--card);font-family:var(--title);font-size:18px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;}
+  .rbtn{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--ink);background:var(--card);font-family:'IBM Plex Sans KR',sans-serif;font-weight:700;font-size:19px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;}
   .rbtn.o{background:var(--green);}
   .rbtn.x{background:var(--apricot);}
   .rbtn svg.ico{width:18px;height:18px;}
   .rbtn:disabled{opacity:.4;cursor:not-allowed;}
-  .row-label{font-size:12px;font-weight:600;color:var(--sub);padding:0 4px;margin:2px 0 4px;}
+  .row-label{font-size:13px;font-weight:700;color:var(--ink);padding:0 4px;margin:2px 0 4px;}
   .day-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;margin-bottom:8px;}
   .att-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;}
   .cell{min-height:58px;min-width:0;border:1.5px solid var(--line);border-radius:12px;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:3px 1px;cursor:pointer;-webkit-tap-highlight-color:transparent;}
   .cell.blank{border-style:dashed;background:transparent;cursor:default;}
-  .cell .c-top{font-size:11px;font-weight:600;color:var(--sub);line-height:1.1;white-space:nowrap;}
+  .cell .c-top{font-size:12px;font-weight:600;color:var(--ink);line-height:1.1;white-space:nowrap;}
   .cell .c-num{font-size:15px;font-weight:700;line-height:1.1;}
-  .cell .c-mark{font-family:var(--title);font-size:17px;line-height:1;min-height:17px;}
+  .cell .c-mark{position:relative;display:block;width:20px;height:20px;font-size:0;line-height:0;color:transparent;}
+  .cell.o .c-mark::before{content:'';position:absolute;inset:1px;border:2.5px solid var(--ink);border-radius:50%;}
+  .cell.x .c-mark::before,.cell.x .c-mark::after{content:'';position:absolute;left:50%;top:50%;width:21px;height:2.5px;margin:-1.25px 0 0 -10.5px;background:var(--ink);border-radius:2px;transform:rotate(45deg);}
+  .cell.x .c-mark::after{transform:rotate(-45deg);}
   .cell.o{background:var(--green);border-color:var(--ink);}
   .cell.x{background:var(--apricot);border-color:var(--ink);}
   .cell.today{border:3px solid var(--ink);}
   .cell.today:not(.o):not(.x){background:var(--sky);}
   .cell.today .c-top{color:var(--ink);}
-  .att-cell .c-top{font-size:11px;letter-spacing:-.4px;}
+  .att-cell .c-top{font-size:12px;letter-spacing:-.4px;}
   .cell.ro{cursor:default;}
   .hint{font-size:12px;color:var(--sub);text-align:center;margin:-4px 0 10px;}
 
@@ -356,11 +361,44 @@
   .miss-note{font-size:13px;font-weight:600;background:var(--yellow);border:1.5px solid var(--ink);border-radius:14px;padding:8px 10px;margin-bottom:10px;}
   .miss-loading{text-align:center;padding:24px 0;color:var(--sub);font-size:14px;font-weight:600;}
 
+  /* 태블릿(가로 700px 이상): 화면을 넓게 쓰고 글자·칸을 한 단계 크게 */
+  @media(min-width:700px){
+    body{font-size:15px;padding-left:16px;padding-right:16px;}
+    .wrap{max-width:760px;}
+    .demo-banner{max-width:760px;}
+    .btn{font-size:15px;}
+    .btn-sm{font-size:14px;}
+    .top-name{font-size:20px;}
+    .top-sub{font-size:14px;}
+    .save-status,.sync-status{font-size:14px;}
+    .t-tab,.m-tab{font-size:15px;}
+    .week-card{padding:12px 10px 10px;}
+    .week-title{font-size:21px;}
+    .week-range{font-size:15px;}
+    .row-label{font-size:14px;}
+    .day-row,.att-row{gap:6px;}
+    .cell{min-height:70px;border-radius:14px;}
+    .cell .c-top{font-size:14px;}
+    .att-cell .c-top{font-size:14px;letter-spacing:0;}
+    .cell .c-num{font-size:18px;}
+    .cell .c-mark{width:24px;height:24px;}
+    .cell.x .c-mark::before,.cell.x .c-mark::after{width:25px;height:3px;margin:-1.5px 0 0 -12.5px;}
+    .cell.o .c-mark::before{border-width:3px;}
+    .bulk-label{font-size:16px;}
+    .ox-legend{font-size:14px;}
+    .ox-legend .lg{font-size:13px;}
+    .top-actions .btn{font-size:14px;}
+    .sum-name{font-size:17px;}
+    .sum-label{font-size:15px;color:var(--ink);}
+    .sum-big{font-size:38px;}
+    .sum-detail{font-size:14px;}
+  }
   /* 휴대폰: 좌우 여백을 줄여 7칸 날짜도 44px 이상 */
   @media(max-width:400px){
     body{padding-left:6px;padding-right:6px;}
     .week-card{padding-left:4px;padding-right:4px;}
     .cell .c-num{font-size:14px;}
+    .att-cell .c-top{font-size:11px;}
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -438,16 +476,18 @@
       <div class="save-status" id="save-status">자동저장</div>
       <div class="sync-status hidden" id="sync-status">동기화 중</div>
     </div>
-    <div class="top-actions">
-      <button class="btn btn-sm" id="btn-file-save" onclick="exportData()">파일 저장</button>
-      <button class="btn btn-sm" id="btn-file-load" onclick="document.getElementById('file-input').click()">불러오기</button>
-      <button class="btn btn-sm" id="btn-cloud" onclick="manualSync()" title="서버에서 최신 데이터 불러오기">동기화</button>
+    <div class="top-actions" id="top-actions">
       <button class="btn btn-sm" id="btn-settings" onclick="openSettingsModal()">관리</button>
       <button class="btn btn-sm" id="btn-report" onclick="openReportModal()">보고서</button>
       <button class="btn btn-sm" id="btn-missing" onclick="openMissingModal()">미입력 현황</button>
       <button class="btn btn-sm btn-sky" id="btn-cloud-save" onclick="cloudSave()">저장</button>
       <button class="btn btn-sm" id="btn-change-pin" onclick="openChangePinModal()">PIN 변경</button>
+      <button class="btn btn-sm" id="btn-more" onclick="toggleMoreActions()" aria-expanded="false">더보기</button>
       <button class="btn btn-sm btn-pink" onclick="logout()">로그아웃</button>
+      <!-- 자주 쓰지 않는 관리자 기능: "더보기"를 누르면 보임 -->
+      <button class="btn btn-sm more-item" id="btn-file-save" onclick="exportData()">파일 저장</button>
+      <button class="btn btn-sm more-item" id="btn-file-load" onclick="document.getElementById('file-input').click()">불러오기</button>
+      <button class="btn btn-sm more-item" id="btn-cloud" onclick="manualSync()" title="서버에서 최신 데이터 불러오기">동기화</button>
     </div>
     <input type="file" id="file-input" accept=".json" onchange="importData(event)" />
   </div>
@@ -662,7 +702,7 @@ function getWeeks(y, m) {
 function buildSeasonMonths(y) {
   const months = [];
   const decPrevLast = new Date(y - 1, 12, 0).getDate();
-  months.push({label:`${String(y - 1).slice(2)}.12월`, month: 12, year: y - 1, last: decPrevLast, weeks: getWeeks(y - 1, 12)});
+  months.push({label:'작년 12월', month: 12, year: y - 1, last: decPrevLast, weeks: getWeeks(y - 1, 12)});
   for (let m = 1; m <= 12; m++) {
     const last = new Date(y, m, 0).getDate();
     months.push({label:`${m}월`, month: m, year: y, last, weeks: getWeeks(y, m)});
@@ -1592,9 +1632,20 @@ function showApp() {
   document.getElementById('btn-cloud-save').classList.toggle('hidden', isAdmin);
   document.getElementById('btn-report').classList.toggle('hidden', !isAdmin);
   document.getElementById('btn-missing').classList.toggle('hidden', !isAdmin);
+  document.getElementById('btn-more').classList.toggle('hidden', !isAdmin);
+  toggleMoreActions(false);
   activeMonth = todayMonthIndex(); // 로그인하면 이번 달 열기
   applySeasonUI();
   render({center: true});
+}
+
+// 관리자 "더보기": 파일 저장·불러오기·동기화를 펼치거나 접음
+function toggleMoreActions(force) {
+  const box = document.getElementById('top-actions'), btn = document.getElementById('btn-more');
+  const open = typeof force === 'boolean' ? force : !box.classList.contains('show-more');
+  box.classList.toggle('show-more', open);
+  btn.textContent = open ? '접기' : '더보기';
+  btn.setAttribute('aria-expanded', String(open));
 }
 
 /* ══════ 회기 선택 (지난 회기 조회 전용) ══════ */
@@ -2435,7 +2486,7 @@ function renderNotes() {
     return `<div class="note-row card${n.archived ? ' archived' : ''}${open ? ' open' : ''}">
       <button class="note-row-head" data-sid="${esc(n.student_id)}" aria-expanded="${open}">
         <span class="note-name">${esc(d.name)}</span>
-        <span class="note-class">${esc(n.class_name || '분반 미정')}</span>
+        ${notesSort === 'class' ? '' : `<span class="note-class">${esc(n.class_name || '분반 미정')}</span>`}
         ${mine ? '<span class="note-mine">내 기록</span>' : ''}
         <svg class="ico note-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
       </button>
