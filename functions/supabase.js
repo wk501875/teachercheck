@@ -1,5 +1,11 @@
 const SUPABASE_URL = 'https://vmvalgkbdfyrdiayaxyz.supabase.co/rest/v1';
-const SUPABASE_KEY = 'sb_publishable_GkszbBMYO7SQYedNBw0-7Q_Jv90-DUH';
+// 공개 키: 비밀 키를 설정하기 전까지만 임시로 사용 (Supabase에서 잠그면 이 키로는 2026 원본 행만 보임)
+const SUPABASE_PUBLIC_KEY = 'sb_publishable_GkszbBMYO7SQYedNBw0-7Q_Jv90-DUH';
+// 비밀 키는 코드에 적지 않고 Cloudflare Pages 설정(환경 변수 SUPABASE_SECRET_KEY)에 넣음 → 저장소가 공개여도 안전
+let SB_KEY = SUPABASE_PUBLIC_KEY;
+function useKeyFrom(env) {
+  SB_KEY = (env && env.SUPABASE_SECRET_KEY) || SUPABASE_PUBLIC_KEY;
+}
 
 /* ══════ 회기 규칙 ══════
  * 회기 N = (N-1)년 12월 ~ N년 12월 (13개월).
@@ -27,11 +33,9 @@ function rosterRowId(dept, season) {
   return `${dept}_${season}`;
 }
 
-const headers = {
-  'Content-Type': 'application/json',
-  'apikey': SUPABASE_KEY,
-  'Authorization': `Bearer ${SUPABASE_KEY}`,
-};
+function sbHeaders() {
+  return { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
+}
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
@@ -42,7 +46,7 @@ class HttpError extends Error {
 }
 
 async function sb(path, opt = {}) {
-  const res = await fetch(`${SUPABASE_URL}/${path}`, { ...opt, headers: { ...headers, ...(opt.headers || {}) } });
+  const res = await fetch(`${SUPABASE_URL}/${path}`, { ...opt, headers: { ...sbHeaders(), ...(opt.headers || {}) } });
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
@@ -107,13 +111,21 @@ async function createSeasonRoster(dept, season) {
   return getRoster(dept, season);
 }
 
+// 누구에게나 보내는 명단: 이름·ID만 (PIN·관리자 비밀번호는 절대 보내지 않음)
 function rosterPublic(row) {
   return {
     org_name: row.org_name,
-    admin_pw: row.admin_pw,
-    teachers: ensureIds(row.teachers),
+    teachers: ensureIds(row.teachers).map(t => ({ id: t.id, name: t.name })),
     locked_months: row.locked_months,
     roster_version: row.updated_at || null,
+  };
+}
+// 관리자 비밀번호를 확인한 경우에만: PIN·관리자 비밀번호 포함 (관리 창에서 보고 고칠 수 있게)
+function rosterAdmin(row) {
+  return {
+    ...rosterPublic(row),
+    admin_pw: row.admin_pw,
+    teachers: ensureIds(row.teachers).map(t => ({ id: t.id, name: t.name, pin: t.pin })),
   };
 }
 
@@ -143,11 +155,12 @@ async function getRecord(dept, season, teacherId) {
 }
 
 /* ── 현재 회기: 명단 + 선생님별 기록 불러오기 (명단 행이 없으면 직전 회기에서 복사해 생성) ── */
-async function handleGet(dept, season) {
+async function handleGet(dept, season, p) {
   let row = await getRoster(dept, season);
   if (!row) row = await createSeasonRoster(dept, season);
   if (!row) return json({ roster_row_missing: true, teachers: [], records: [] });
-  const out = { ...rosterPublic(row), legacy_state: row.state || [], records: [] };
+  const admin = p && String(p.actor_id || '') === 'admin' && await isAdmin(season, p);
+  const out = { ...(admin ? rosterAdmin(row) : rosterPublic(row)), legacy_state: row.state || [], records: [] };
   const rec = await getRecords(dept, season);
   if (rec.missing) out.records_error = 'records_table_missing';
   else out.records = rec.records;
@@ -177,22 +190,29 @@ async function handlePastGet(dept, season) {
 /* ── 관리자 명단·PIN·마감 설정 저장 (기록은 건드리지 않음) ── */
 async function handleSaveRoster(dept, season, p) {
   if (!p || !Array.isArray(p.teachers)) throw new HttpError(400, 'Invalid teachers');
+  await requireAdmin(season, p);
+  const cur = await getRoster(dept, season);
+  if (!cur) throw rowMissingError(dept, season);
+  const oldPin = {};
+  ensureIds(cur.teachers).forEach(t => { oldPin[t.id] = t.pin; });
   const ids = new Set();
   const teachers = p.teachers.map(t => {
     if (!t || !ID_RE.test(String(t.id)) || ids.has(t.id)) throw new HttpError(400, 'Invalid teacher id');
     ids.add(t.id);
-    return { id: String(t.id), name: String(t.name || '').slice(0, 30), pin: String(t.pin || '').slice(0, 20) };
+    // PIN을 비워 보내면 원래 PIN 유지
+    const pin = String(t.pin || '').slice(0, 20) || String(oldPin[t.id] || '');
+    return { id: String(t.id), name: String(t.name || '').slice(0, 30), pin };
   });
   const saved = await patchRosterIfVersion(dept, season, p.roster_version, {
     org_name: String(p.org_name || '').slice(0, 30),
-    admin_pw: String(p.admin_pw || '').slice(0, 20),
+    admin_pw: String(p.admin_pw || '').slice(0, 20) || String(cur.admin_pw || ''), // 비우면 원래 비밀번호 유지
     teachers,
     locked_months: p.locked_months || {},
   });
   if (saved) return json({ ok: true, roster_version: saved.updated_at });
   const row = await getRoster(dept, season);
   if (!row) throw rowMissingError(dept, season);
-  return json({ conflict: true, roster: rosterPublic(row) }, 409);
+  return json({ conflict: true, roster: rosterAdmin(row) }, 409);
 }
 
 /* ── 선생님 PIN 변경 (본인 PIN만 바꾸고 다른 사람 정보는 그대로) ── */
@@ -206,7 +226,7 @@ async function handleSetPin(dept, season, p) {
     const teachers = ensureIds(row.teachers);
     const idx = teachers.findIndex(t => t.id === p.teacher_id);
     if (idx === -1) throw new HttpError(404, '명단에 없는 선생님입니다.');
-    if (teachers[idx].pin !== String(p.old_pin || '')) throw new HttpError(403, '현재 PIN이 올바르지 않습니다.', { code: 'wrong_pin' });
+    if (!samePin(p.old_pin, teachers[idx].pin)) { await failPause(); throw new HttpError(403, '현재 PIN이 올바르지 않습니다.', { code: 'wrong_pin' }); }
     teachers[idx] = { ...teachers[idx], pin: newPin };
     const saved = await patchRosterIfVersion(dept, season, row.updated_at, { teachers });
     if (saved) return json({ ok: true, roster_version: saved.updated_at });
@@ -225,6 +245,12 @@ async function handleSaveRecord(dept, season, p) {
   const row = await getRoster(dept, season);
   if (!row) throw rowMissingError(dept, season);
   if (!ensureIds(row.teachers).some(t => t.id === p.teacher_id)) throw new HttpError(404, '명단에 없는 선생님입니다.', { code: 'unknown_teacher' });
+  // 본인 확인: 그 선생님 본인(PIN) 또는 관리자만 저장 가능
+  if (String(p.actor_id || '') === 'admin') await requireAdmin(season, p);
+  else {
+    const me = ensureIds(row.teachers).find(t => t.id === String(p.actor_id || ''));
+    if (!me || String(p.actor_id) !== String(p.teacher_id) || !samePin(p.actor_secret, me.pin)) throw notAuthorized();
+  }
 
   const now = new Date().toISOString();
   const seasonStr = String(season);
@@ -270,14 +296,40 @@ async function handleGetNotes(season) {
   return json({ notes: r.data || [] });
 }
 /* ── 관리자: 선생님을 다른 부서로 옮기기 (이름·PIN·올해 기록을 함께, 원래 부서의 기록은 지우지 않음) ── */
-async function requireAdmin(season, p) {
-  if (String(p.actor_id || '') === 'admin') {
-    for (const dept of ['senior', 'junior']) {
-      const row = await getRoster(dept, season);
-      if (row && row.admin_pw && String(p.actor_secret || '') === String(row.admin_pw)) return;
-    }
+function samePin(input, stored) {
+  return !!stored && String(input || '') === String(stored);
+}
+function notAuthorized() {
+  return new HttpError(403, '로그인 정보가 맞지 않습니다. 로그아웃 후 다시 로그인해주세요.', { code: 'not_authorized' });
+}
+async function isAdmin(season, p) {
+  if (String(p.actor_id || '') !== 'admin') return false;
+  for (const dept of ['senior', 'junior']) {
+    const row = await getRoster(dept, season);
+    if (row && samePin(p.actor_secret, row.admin_pw)) return true;
   }
-  throw new HttpError(403, '관리자 비밀번호가 맞지 않습니다. 다시 로그인해주세요.', { code: 'not_authorized' });
+  return false;
+}
+async function requireAdmin(season, p) {
+  if (!(p && await isAdmin(season, p))) throw new HttpError(403, '관리자 비밀번호가 맞지 않습니다. 다시 로그인해주세요.', { code: 'not_authorized' });
+}
+const failPause = () => new Promise(r => setTimeout(r, 600)); // 틀린 PIN을 빠르게 계속 넣어보는 것을 늦춤
+
+/* ── 로그인: PIN·관리자 비밀번호는 서버에서만 확인 ── */
+async function handleLogin(dept, season, p) {
+  p = p || {};
+  if (String(p.actor_id || '') === 'admin') {
+    if (await isAdmin(season, p)) return json({ ok: true, role: 'admin' });
+    await failPause();
+    return json({ error: '관리자 비밀번호가 맞지 않습니다.', code: 'wrong_password' }, 403);
+  }
+  let row = await getRoster(dept, season);
+  if (!row) row = await createSeasonRoster(dept, season);
+  if (!row) throw rowMissingError(dept, season);
+  const t = ensureIds(row.teachers).find(x => x.id === String(p.actor_id || ''));
+  if (t && samePin(p.actor_secret, t.pin)) return json({ ok: true, role: 'teacher', id: t.id, name: t.name });
+  await failPause();
+  return json({ error: 'PIN이 맞지 않습니다.', code: 'wrong_pin' }, 403);
 }
 async function handleMoveTeacher(from, season, p) {
   if (!p || !ID_RE.test(String(p.teacher_id))) throw new HttpError(400, 'Invalid teacher id');
@@ -350,12 +402,12 @@ async function noteActor(season, p) {
   if (!row) throw rowMissingError('senior', season);
   const id = String(p.actor_id || ''), secret = String(p.actor_secret || '');
   if (id === 'admin') {
-    if (row.admin_pw && secret === String(row.admin_pw)) return { id: 'admin', name: '관리자', admin: true };
+    if (samePin(secret, row.admin_pw)) return { id: 'admin', name: '관리자', admin: true };
   } else {
     const t = ensureIds(row.teachers).find(x => x.id === id);
-    if (t && secret === String(t.pin || '')) return { id: t.id, name: String(t.name || ''), admin: false };
+    if (t && samePin(secret, t.pin)) return { id: t.id, name: String(t.name || ''), admin: false };
   }
-  throw new HttpError(403, '로그인 정보가 맞지 않습니다. 다시 로그인해주세요.', { code: 'not_authorized' });
+  throw notAuthorized();
 }
 // 작성한 선생님 본인과 관리자만 수정 가능 (작성자 정보가 없는 예전 기록은 마지막으로 저장한 선생님을 작성자로 봄)
 function canEditNote(note, actor) {
@@ -420,6 +472,7 @@ async function handleSaveNote(season, p) {
 }
 
 export async function onRequestPost(context) {
+  useKeyFrom(context.env);
   let body;
   try {
     body = await context.request.json();
@@ -452,10 +505,15 @@ export async function onRequestPost(context) {
 
   try {
     if (method === 'GET') {
-      return await withSeason(reqSeason === cur ? handleGet(dept, cur) : handlePastGet(dept, reqSeason));
+      return await withSeason(reqSeason === cur ? handleGet(dept, cur, payload) : handlePastGet(dept, reqSeason));
+    }
+    if (method === 'LOGIN') {
+      if (reqSeason !== cur) return json({ error: '로그인은 올해 명단으로만 할 수 있습니다', code: 'season_closed', current_season: cur }, 403);
+      return await withSeason(handleLogin(dept, cur, payload));
     }
     if (method === 'GET_NOTES') {
       if (dept !== 'senior') return json({ error: '학생 특이사항은 중고등부만 사용합니다', current_season: cur }, 400);
+      await noteActor(cur, payload || {}); // 민감한 정보라서 중고등부 선생님·관리자만 (올해 명단 기준)
       return await withSeason(handleGetNotes(reqSeason));
     }
     if (method === 'PUT') {
@@ -496,6 +554,8 @@ export async function onRequestOptions() {
     },
   });
 }
+// 주소창에서 /supabase 를 열면: 비밀 키가 설정됐는지만 알려줌 (데이터는 보여주지 않음)
 export async function onRequestGet(context) {
-  return onRequestPost(context);
+  const secure = !!(context.env && context.env.SUPABASE_SECRET_KEY);
+  return json({ ok: true, secret_key: secure, message: secure ? '비밀 키 연결됨' : '비밀 키가 아직 설정되지 않았습니다 (공개 키 사용 중)' });
 }

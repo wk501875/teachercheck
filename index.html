@@ -721,7 +721,7 @@ function emptyTeacherState(months = CUR_MONTHS) {
 
 /* ══════ APP STATE ══════ */
 let orgName = '교사 체크리스트';
-let adminPw = '1234';
+let adminPw = ''; // 관리자로 로그인했을 때만 서버에서 받아 메모리에 둠 (브라우저에 저장하지 않음)
 const DEPTS = {
   junior: { label: '유초등부', color: 'var(--yellow)' },
   senior: { label: '중고등부', color: 'var(--sky)' }
@@ -730,30 +730,30 @@ let activeDept = 'senior'; // 기본값
 
 let teachersByDept = {
   junior: [
-    {name:'이진우',pin:'0000'},{name:'이준원',pin:'0000'},{name:'조현화',pin:'0000'},
-    {name:'장세현',pin:'0000'},{name:'장세린',pin:'0000'},{name:'고준희',pin:'0000'},
-    {name:'이미경',pin:'0000'},{name:'유지윤',pin:'0000'},{name:'김민희',pin:'0000'},
-    {name:'김장성',pin:'0000'},{name:'이수빈',pin:'0000'},{name:'이채유',pin:'0000'},
-    {name:'강규빈',pin:'0000'},{name:'이건영',pin:'0000'},{name:'이희규',pin:'0000'},
-    {name:'김예빈',pin:'0000'},{name:'안은숙',pin:'0000'},{name:'서순혁',pin:'0000'},
-    {name:'나승민',pin:'0000'},{name:'김승원',pin:'0000'},{name:'김주현',pin:'0000'},
-    {name:'이은비',pin:'0000'},{name:'변나래',pin:'0000'},{name:'이성지',pin:'0000'},
-    {name:'이다은',pin:'0000'},{name:'이다정',pin:'0000'},{name:'이주환',pin:'0000'},
-    {name:'이희진',pin:'0000'},{name:'윤희동',pin:'0000'},{name:'지성진',pin:'0000'},
-    {name:'한지수',pin:'0000'},{name:'박태우',pin:'0000'},{name:'유경옥',pin:'0000'},
-    {name:'최준식',pin:'0000'}
+    {name:'이진우'},{name:'이준원'},{name:'조현화'},
+    {name:'장세현'},{name:'장세린'},{name:'고준희'},
+    {name:'이미경'},{name:'유지윤'},{name:'김민희'},
+    {name:'김장성'},{name:'이수빈'},{name:'이채유'},
+    {name:'강규빈'},{name:'이건영'},{name:'이희규'},
+    {name:'김예빈'},{name:'안은숙'},{name:'서순혁'},
+    {name:'나승민'},{name:'김승원'},{name:'김주현'},
+    {name:'이은비'},{name:'변나래'},{name:'이성지'},
+    {name:'이다은'},{name:'이다정'},{name:'이주환'},
+    {name:'이희진'},{name:'윤희동'},{name:'지성진'},
+    {name:'한지수'},{name:'박태우'},{name:'유경옥'},
+    {name:'최준식'}
   ],
   senior: [
-    {name:'강성훈',pin:'0000'},{name:'구진희',pin:'0000'},{name:'김나현',pin:'0000'},
-    {name:'김서지',pin:'0000'},{name:'김은혜',pin:'0000'},{name:'김하늘',pin:'0000'},
-    {name:'류정완',pin:'0000'},{name:'박건우',pin:'0000'},{name:'박소람',pin:'0000'},
-    {name:'변성준',pin:'0000'},{name:'서하은',pin:'0000'},{name:'양하영',pin:'0000'},
-    {name:'유호연',pin:'0000'},{name:'윤지훈',pin:'0000'},{name:'이건희',pin:'0000'},
-    {name:'이수아',pin:'0000'},{name:'이순규',pin:'0000'},{name:'이채연',pin:'0000'},
-    {name:'장선아',pin:'0000'},{name:'장선옥',pin:'0000'},{name:'정수영',pin:'0000'},
-    {name:'정유찬',pin:'0000'},{name:'정준영',pin:'0000'},{name:'조명근',pin:'0000'},
-    {name:'조성은',pin:'0000'},{name:'주신욱',pin:'0000'},{name:'최원우',pin:'0000'},
-    {name:'최은선',pin:'0000'},{name:'허형강',pin:'0000'}
+    {name:'강성훈'},{name:'구진희'},{name:'김나현'},
+    {name:'김서지'},{name:'김은혜'},{name:'김하늘'},
+    {name:'류정완'},{name:'박건우'},{name:'박소람'},
+    {name:'변성준'},{name:'서하은'},{name:'양하영'},
+    {name:'유호연'},{name:'윤지훈'},{name:'이건희'},
+    {name:'이수아'},{name:'이순규'},{name:'이채연'},
+    {name:'장선아'},{name:'장선옥'},{name:'정수영'},
+    {name:'정유찬'},{name:'정준영'},{name:'조명근'},
+    {name:'조성은'},{name:'주신욱'},{name:'최원우'},
+    {name:'최은선'},{name:'허형강'}
   ]
 };
 let stateByDept = {
@@ -769,19 +769,23 @@ let teachers = teachersByDept[activeDept];
 let state = stateByDept[activeDept];
 
 let session = {role:null, teacherIdx:null, teacherId:null};
+// 서버가 본인 확인에 쓰는 값 (로그인 때 입력한 PIN/관리자 비밀번호, 메모리에만)
+function actorBody() {
+  return session.role === 'admin' ? { actor_id: 'admin', actor_secret: session.secret || '' }
+       : session.role === 'teacher' ? { actor_id: session.teacherId, actor_secret: session.secret || '' } : {};
+}
+// PIN·관리자 비밀번호를 메모리에서 지움 (로그아웃할 때)
+function forgetSecrets() {
+  adminPw = '';
+  ['junior','senior'].forEach(d => (teachersByDept[d] || []).forEach(t => { delete t.pin; }));
+  ['junior','senior'].forEach(d => { const m = rosterMeta[d]; if (m && m.base) { m.base.admin_pw = ''; (m.base.teachers || []).forEach(t => { delete t.pin; }); } });
+}
 let activeTeacher = 0;
 let activeMonth = 0;
 let modalTeachers = [];
 
-/* ══════ SECURITY: PIN HASH ══════ */
-async function hashPin(pin) {
-  return pin; // 평문 저장
-}
-async function pinMatches(plain, stored) {
-  if (!stored) return false;
-  if (stored.length === 64) return false; // 구버전 해시 → 로그인 불가, 관리자가 PIN 재설정 필요
-  return plain === stored;
-}
+/* ══════ SECURITY ══════ */
+// PIN·관리자 비밀번호는 서버에서만 확인 (LOGIN). 일반 화면에는 PIN이 오지 않고, 관리자 로그인 후에만 관리 창용으로 받음
 
 /* ══════ CLOUD CONFIG ══════ */
 // 서버 저장은 항상 켜져 있음 (예전 '클라우드 동기화 활성화' 체크박스는 제거)
@@ -829,9 +833,15 @@ function persistLocal() {
   if (DEMO) return; // 데모: 어디에도 저장하지 않음
   if (isPast()) return;
   try {
+    // PIN·관리자 비밀번호는 브라우저에 저장하지 않음
+    const noPins = list => (list || []).map(t => ({ id: t.id, name: t.name }));
+    const metaNoPins = m => m && m.base ? { ...m, base: { ...m.base, admin_pw: '', teachers: noPins(m.base.teachers) } } : m;
     localStorage.setItem(LS_KEY, JSON.stringify({
-      orgName, adminPw, teachersByDept, stateByDept, lockedMonths,
-      recMeta, rosterMeta, pendingRecords, pendingRoster
+      orgName,
+      teachersByDept: { junior: noPins(teachersByDept.junior), senior: noPins(teachersByDept.senior) },
+      stateByDept, lockedMonths, recMeta,
+      rosterMeta: { junior: metaNoPins(rosterMeta.junior), senior: metaNoPins(rosterMeta.senior) },
+      pendingRecords, pendingRoster
     }));
   } catch(e) { if(e && e.name==='QuotaExceededError') showToast('⚠️ 저장 공간이 부족합니다. 파일로 저장해주세요.'); }
 }
@@ -854,8 +864,7 @@ function loadFromLocal() {
     if (!raw) return false;
     const p = JSON.parse(raw);
     if (!p) return false;
-    orgName = p.orgName || orgName;
-    adminPw = p.adminPw || adminPw;
+    orgName = p.orgName || orgName; // 예전에 저장된 PIN·관리자 비밀번호는 읽지 않음 (다음 저장 때 지워짐)
     if (p.lockedMonths) {
       lockedMonths.junior = p.lockedMonths.junior || [];
       lockedMonths.senior = p.lockedMonths.senior || [];
@@ -871,11 +880,12 @@ function loadFromLocal() {
       });
     }
     ['junior','senior'].forEach(dept => {
-      teachersByDept[dept] = ensureIds(teachersByDept[dept]);
+      teachersByDept[dept] = ensureIds(teachersByDept[dept]).map(t => ({ id: t.id, name: t.name }));
       while (stateByDept[dept].length < teachersByDept[dept].length) stateByDept[dept].push(emptyTeacherState());
     });
     if (p.recMeta) recMeta = { junior: p.recMeta.junior || {}, senior: p.recMeta.senior || {} };
     if (p.rosterMeta) rosterMeta = { junior: p.rosterMeta.junior || null, senior: p.rosterMeta.senior || null };
+    forgetSecrets();
     if (p.pendingRecords) pendingRecords = p.pendingRecords;
     if (p.pendingRoster) pendingRoster = { junior: !!p.pendingRoster.junior, senior: !!p.pendingRoster.senior };
     teachers = teachersByDept[activeDept];
@@ -1001,15 +1011,29 @@ async function demoApi(p) {
   if (p.method === 'SEASON') return ok({ seasons: [PAST_YEAR, YEAR] });
   const db = demoDB[p.dept];
   if (!db) return fail(400, { error: 'Invalid dept' });
+  // 실제 서버와 같은 규칙: PIN·관리자 비밀번호는 관리자 확인 후에만 보냄
+  const b0 = p.body || {};
+  const isAdm = b0.actor_id === 'admin' && b0.actor_secret === demoDB.adminPw;
+  const notAuth = () => fail(403, { error: '로그인 정보가 맞지 않습니다.', code: 'not_authorized' });
   if (p.method === 'GET') {
     if (p.season === PAST_YEAR) return ok({ teachers: clone(db.past), state: clone(db.pastState) });
     return ok({
-      org_name: '일산교회', admin_pw: demoDB.adminPw, teachers: clone(db.teachers),
+      org_name: '일산교회', ...(isAdm ? { admin_pw: demoDB.adminPw } : {}),
+      teachers: db.teachers.map(t => isAdm ? { id: t.id, name: t.name, pin: t.pin } : { id: t.id, name: t.name }),
       locked_months: clone(db.locked), roster_version: db.rosterVer, legacy_state: [],
       records: Object.entries(db.records).map(([id, rec]) => ({ teacher_id: id, state: clone(rec.state), version: rec.version })),
     });
   }
-  if (p.method === 'GET_NOTES') return ok({ notes: clone(demoDB.notes[p.season] || []) });
+  if (p.method === 'LOGIN') {
+    if (b0.actor_id === 'admin') return isAdm ? ok({ ok: true, role: 'admin' }) : fail(403, { error: '관리자 비밀번호가 맞지 않습니다.', code: 'wrong_password' });
+    const t = db.teachers.find(x => x.id === b0.actor_id);
+    return t && t.pin === b0.actor_secret ? ok({ ok: true, role: 'teacher', id: t.id, name: t.name }) : fail(403, { error: 'PIN이 맞지 않습니다.', code: 'wrong_pin' });
+  }
+  if (p.method === 'GET_NOTES') {
+    const st = demoDB.senior.teachers.find(x => x.id === b0.actor_id);
+    if (!isAdm && !(st && st.pin === b0.actor_secret)) return notAuth();
+    return ok({ notes: clone(demoDB.notes[p.season] || []) });
+  }
   if (p.season !== YEAR) return fail(403, { error: '지난해 기록은 조회만 가능합니다', code: 'season_closed' });
   const b = p.body || {};
   if (p.method === 'SAVE_NOTE') {
@@ -1034,6 +1058,8 @@ async function demoApi(p) {
     return ok({ ok: true, version: v + 1, updated_at: saved.updated_at, updated_by: actor.name, owner_id: data.owner_id, owner_name: data.owner_name });
   }
   if (p.method === 'SAVE_RECORD') {
+    const me = db.teachers.find(x => x.id === b.actor_id);
+    if (!isAdm && !(me && b.actor_id === b.teacher_id && me.pin === b.actor_secret)) return notAuth();
     const cur = db.records[b.teacher_id], v = cur ? cur.version : 0;
     if (b.version !== v) return fail(409, { conflict: true, record: cur ? { teacher_id: b.teacher_id, state: clone(cur.state), version: v } : null });
     db.records[b.teacher_id] = { state: clone(b.state), version: v + 1 };
@@ -1054,7 +1080,9 @@ async function demoApi(p) {
     return ok({ ok: true, to, new_id: newId, name: t.name });
   }
   if (p.method === 'SAVE_ROSTER') {
-    db.teachers = clone(b.teachers || []);
+    if (!isAdm) return fail(403, { error: '관리자 비밀번호가 맞지 않습니다.', code: 'not_authorized' });
+    const oldPin = {}; db.teachers.forEach(t => { oldPin[t.id] = t.pin; });
+    db.teachers = clone(b.teachers || []).map(t => ({ ...t, pin: t.pin || oldPin[t.id] || '' }));
     db.locked = clone(b.locked_months || {});
     if (b.admin_pw) demoDB.adminPw = b.admin_pw;
     db.rosterVer = new Date(Date.now() + 1).toISOString();
@@ -1177,16 +1205,18 @@ function refreshScreen() {
 }
 
 async function saveRoster(dept) {
+  if (session.role !== 'admin') return; // 명단은 관리자만 저장 (관리자로 로그인하면 저장됨)
   for (let attempt = 0; attempt < 3; attempt++) {
     const meta = rosterMeta[dept];
     const sent = rosterSnapshot(dept);
     const r = await api({ dept, season: YEAR, method: 'SAVE_ROSTER', body: {
       org_name: sent.org_name, admin_pw: sent.admin_pw, teachers: sent.teachers,
       locked_months: {...clone(lockedMonths), [dept]: sent.locked},
-      roster_version: meta ? meta.version : null
+      roster_version: meta ? meta.version : null, ...actorBody()
     }});
     if (r.ok) {
       rosterMeta[dept] = { version: r.data.roster_version, base: sent };
+      if (sent.admin_pw && session.role === 'admin') session.secret = sent.admin_pw; // 관리자 비밀번호를 바꾼 경우 이후 저장에 새 비밀번호 사용
       if (JSON.stringify(rosterSnapshot(dept)) === JSON.stringify(sent)) pendingRoster[dept] = false;
       return;
     }
@@ -1214,7 +1244,7 @@ async function saveRecord(dept, id) {
     if (ti === -1) { delete pendingRecords[key]; return; } // 명단에서 삭제된 선생님
     const meta = recMeta[dept][id] || (recMeta[dept][id] = { version: 0, base: emptyTeacherState() });
     const sent = clone(stateByDept[dept][ti]);
-    const r = await api({ dept, season: YEAR, method: 'SAVE_RECORD', body: { teacher_id: id, state: sent, version: meta.version } });
+    const r = await api({ dept, season: YEAR, method: 'SAVE_RECORD', body: { teacher_id: id, state: sent, version: meta.version, ...actorBody() } });
     if (r.ok) {
       meta.version = r.data.version; meta.base = sent;
       const cur = teachersByDept[dept].findIndex(t => t.id === id);
@@ -1238,8 +1268,13 @@ async function saveRecord(dept, id) {
   throw new Error('다른 저장과 겹쳤습니다. 잠시 후 다시 시도합니다');
 }
 
+function canSaveRecord(dept, id) {
+  return session.role === 'admin' || (session.role === 'teacher' && dept === activeDept && id === session.teacherId);
+}
+// 지금 로그인한 사람이 저장할 수 있는 것이 남아 있는지
 function hasPending() {
-  return Object.keys(pendingRecords).length > 0 || pendingRoster.junior || pendingRoster.senior;
+  if (session.role === 'admin') return Object.keys(pendingRecords).length > 0 || pendingRoster.junior || pendingRoster.senior;
+  return Object.keys(pendingRecords).some(k => { const [d, id] = k.split('|'); return canSaveRecord(d, id); });
 }
 function scheduleServerSave(delay = SAVE_DELAY) {
   if (isPast() || !hasPending()) return;
@@ -1252,6 +1287,8 @@ function saveErrorMessage(e) {
     return `⚠️ ${YEAR}년 기록은 마감되어 더 이상 저장할 수 없습니다. 화면을 새로 열어 새해 기록에 입력해주세요.`;
   if (e.code === 'roster_create_failed')
     return `⚠️ ${e.message}`;
+  if (e.code === 'not_authorized')
+    return '⚠️ 로그인 정보가 바뀌어 저장하지 못했습니다. 로그아웃 후 다시 로그인해주세요. (입력한 내용은 이 기기에 임시 보관 중)';
   if (e.code === 'records_table_missing')
     return '⚠️ 서버에 선생님 기록 저장 공간이 아직 없어 저장되지 않았습니다. 관리자에게 알려주세요. (입력한 내용은 이 기기에 임시 보관 중)';
   if (e.code === 'roster_row_missing')
@@ -1267,6 +1304,8 @@ async function doFlush() {
     for (const dept of ['junior', 'senior']) if (pendingRoster[dept]) await saveRoster(dept);
     for (const key of Object.keys(pendingRecords)) {
       const [dept, id] = key.split('|');
+      // 본인 기록만(관리자는 모두) 저장 — 다른 사람 기록은 그 사람이 로그인할 때 저장되도록 이 기기에 남겨 둠
+      if (!canSaveRecord(dept, id)) continue;
       await saveRecord(dept, id);
     }
     saveFailCount = 0;
@@ -1295,7 +1334,7 @@ function retryServerSave() { saveFailCount = 0; flushServerSaves(); }
 async function loadFromServer() {
   const results = {};
   for (const dept of ['junior', 'senior']) {
-    const r = await api({ dept, season: YEAR, method: 'GET' });
+    const r = await api({ dept, season: YEAR, method: 'GET', body: session.role === 'admin' ? actorBody() : undefined });
     if (!r.ok) throw apiError(r);
     if (r.data.current_season && r.data.current_season !== YEAR) throw new Error('새해 화면으로 새로 여는 중입니다');
     results[dept] = r.data;
@@ -1323,7 +1362,7 @@ async function loadFromServer() {
       if ((d.roster_version || '') >= latestVer) {
         latestVer = d.roster_version || '';
         if (d.org_name) orgName = d.org_name;
-        if (d.admin_pw) adminPw = d.admin_pw;
+        if (d.admin_pw && session.role === 'admin') adminPw = d.admin_pw;
       }
     }
 
@@ -1539,15 +1578,39 @@ function buildLoginTeacherSelect() {
   });
   document.getElementById('login-org-name').textContent = orgName;
 }
+// 로그인 확인은 서버에서 (PIN·관리자 비밀번호는 이 화면에 없음)
+let loggingIn = false;
+async function loginRequest(dept, body, btnSel) {
+  if (loggingIn) return null;
+  loggingIn = true;
+  const btn = document.querySelector(btnSel), label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '확인 중...'; }
+  try { return await api({ dept, season: YEAR, method: 'LOGIN', body }); }
+  finally { loggingIn = false; if (btn) { btn.disabled = false; btn.textContent = label; } }
+}
+function loginFailMessage(r) {
+  if (r.status === 0) return '인터넷 연결을 확인해주세요';
+  if (r.data && r.data.code === 'season_closed') return '새해 화면으로 새로 여는 중입니다. 잠시 후 다시 시도해주세요.';
+  return '로그인하지 못했습니다: ' + plain((r.data && r.data.error) || ('HTTP ' + r.status));
+}
 async function loginAdmin() {
   const pw = document.getElementById('admin-pw-input').value;
   const err = document.getElementById('admin-error');
-  const match = await pinMatches(pw, adminPw);
-  if (!match) { err.classList.remove('hidden'); document.getElementById('admin-pw-input').classList.add('error'); return; }
+  if (!pw) { err.classList.remove('hidden'); document.getElementById('admin-pw-input').classList.add('error'); return; }
+  const r = await loginRequest(activeDept, { actor_id: 'admin', actor_secret: pw }, 'button[onclick="loginAdmin()"]');
+  if (!r) return;
+  if (!r.ok) {
+    if (r.data && r.data.code === 'wrong_password') { err.classList.remove('hidden'); document.getElementById('admin-pw-input').classList.add('error'); }
+    else showToast(loginFailMessage(r));
+    return;
+  }
   err.classList.add('hidden');
   document.getElementById('admin-pw-input').classList.remove('error');
-  // secret: 특이사항 저장 때 서버가 본인 확인에 사용 (메모리에만, 브라우저에 저장하지 않음)
-  session = {role:'admin', teacherIdx:null, teacherId:null, secret: pw}; activeTeacher = 0; showApp();
+  // secret: 저장할 때 서버가 본인 확인에 사용 (메모리에만, 브라우저에 저장하지 않음)
+  session = {role:'admin', teacherIdx:null, teacherId:null, secret: pw}; activeTeacher = 0;
+  try { await reloadFromServer(); } catch (e) { console.error(e); } // 관리 창에 쓸 PIN 목록 받기
+  showApp();
+  if (hasPending()) scheduleServerSave(300);
 }
 async function loginTeacher() {
   const sel = document.getElementById('teacher-select-login');
@@ -1555,15 +1618,26 @@ async function loginTeacher() {
   const err = document.getElementById('teacher-error');
   const ti = sel.value;
   if (ti === '') { showToast('이름을 선택해주세요'); return; }
-  const match = await pinMatches(pin, teachers[+ti].pin);
-  if (!match) { err.classList.remove('hidden'); document.getElementById('teacher-pin-input').classList.add('error'); return; }
+  const t = teachers[+ti];
+  if (!pin || !t) { err.classList.remove('hidden'); document.getElementById('teacher-pin-input').classList.add('error'); return; }
+  const r = await loginRequest(activeDept, { actor_id: t.id, actor_secret: pin }, 'button[onclick="loginTeacher()"]');
+  if (!r) return;
+  if (!r.ok) {
+    if (r.data && r.data.code === 'wrong_pin') { err.classList.remove('hidden'); document.getElementById('teacher-pin-input').classList.add('error'); }
+    else showToast(loginFailMessage(r));
+    return;
+  }
   err.classList.add('hidden');
-  session = {role:'teacher', teacherIdx:+ti, teacherId:teachers[+ti].id, secret: pin}; activeTeacher = +ti; showApp();
+  const idx = teachers.findIndex(x => x.id === t.id);
+  if (idx === -1) { showToast('명단이 바뀌었습니다. 다시 선택해주세요'); buildLoginTeacherSelect(); return; }
+  session = {role:'teacher', teacherIdx:idx, teacherId:t.id, secret: pin}; activeTeacher = idx; showApp();
+  if (hasPending()) scheduleServerSave(300);
 }
 function logout() {
   if (isPast()) enterCurrentSeason();
   viewMode = 'check'; notesCache = {}; notesQuery = ''; notesOpenId = null; notesSort = 'class'; closeNoteModal(); closeNoteDetail(); hideUndo();
   session = {role:null, teacherIdx:null, teacherId:null};
+  forgetSecrets(); persistLocal();
   ['admin-pw-input','teacher-pin-input'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('error'); });
   ['admin-error','teacher-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
   document.getElementById('app-screen').classList.add('hidden');
@@ -1698,10 +1772,9 @@ async function applyChangePin() {
   const cur = document.getElementById('pin-current').value;
   const nw = document.getElementById('pin-new').value.trim();
   const cf = document.getElementById('pin-confirm').value.trim();
-  const ti = session.teacherIdx; let ok = true;
-  const curMatch = await pinMatches(cur, teachers[ti].pin);
-  if (!curMatch) { document.getElementById('pin-current-error').classList.remove('hidden'); ok = false; }
-  else document.getElementById('pin-current-error').classList.add('hidden');
+  let ok = true;
+  if (!cur) { document.getElementById('pin-current-error').classList.remove('hidden'); ok = false; }
+  else document.getElementById('pin-current-error').classList.add('hidden'); // 현재 PIN은 서버가 확인
   if (!nw || nw !== cf) { document.getElementById('pin-confirm-error').classList.remove('hidden'); ok = false; }
   else document.getElementById('pin-confirm-error').classList.add('hidden');
   if (!ok) return;
@@ -1710,14 +1783,30 @@ async function applyChangePin() {
     if (r.data.code === 'wrong_pin') { document.getElementById('pin-current-error').classList.remove('hidden'); return; }
     showToast('❌ PIN 변경 실패: ' + (r.data.error || `HTTP ${r.status}`)); return;
   }
-  teachers[ti].pin = await hashPin(nw);
   session.secret = nw;
   persistLocal(); closeChangePinModal(); showToast('✅ PIN이 변경되었습니다!');
 }
 
 /* ══════ SETTINGS MODAL ══════ */
-function openSettingsModal() {
+// 관리 창: PIN 목록은 관리자 비밀번호로 서버에서 받아 옴 (없으면 먼저 받기)
+async function ensureAdminPins() {
+  if (session.role !== 'admin') return true;
+  const missing = ['junior','senior'].some(d => teachersByDept[d].some(t => !t.pin));
+  if (!missing && adminPw) return true;
+  for (const d of ['junior','senior']) {
+    const r = await api({ dept: d, season: YEAR, method: 'GET', body: actorBody() });
+    if (!r.ok || !Array.isArray(r.data.teachers)) return false;
+    const pins = {};
+    r.data.teachers.forEach(t => { if (t.id && t.pin) pins[t.id] = t.pin; });
+    teachersByDept[d].forEach(t => { if (!t.pin && pins[t.id]) t.pin = pins[t.id]; });
+    if (r.data.admin_pw) adminPw = r.data.admin_pw;
+  }
+  return true;
+}
+async function openSettingsModal() {
   if (isPast()) { showToast(PAST_MSG); return; }
+  if (!(await ensureAdminPins())) { showToast('PIN 목록을 불러오지 못했습니다. 인터넷 연결을 확인하거나 다시 로그인해주세요.'); return; }
+  teachers = teachersByDept[activeDept];
   modalTeachers = teachers.map(t => ({...t}));
   modalDrafts = {};
   document.getElementById('modal-org').value = orgName;
@@ -1837,8 +1926,8 @@ async function applySettings() {
   const drafts = {};
   for (const dept of Object.keys(modalDrafts)) {
     drafts[dept] = modalDrafts[dept]
-      .map(t => ({id: t.id || newTeacherId(), name: t.name.trim(), pin: t.pin.trim()}))  // 평문 그대로 저장
-      .filter(t => t.name && t.pin);
+      .map(t => ({id: t.id || newTeacherId(), name: String(t.name || '').trim(), pin: String(t.pin || '').trim()}))  // 평문 그대로 저장
+      .filter(t => t.name && (t.pin || teachersByDept[dept].some(x => x.id === t.id))); // 기존 선생님은 PIN을 비워도 서버가 원래 PIN 유지
     if (!drafts[dept].length) { showToast('⚠️ 선생님을 1명 이상 입력해주세요'); return; }
   }
   if (newOrg !== orgName || newPw) { markRosterDirty('junior'); markRosterDirty('senior'); }
@@ -2276,11 +2365,10 @@ if (DEMO) {
   document.head.insertAdjacentHTML('beforeend', '<meta name="robots" content="noindex, nofollow">');
   document.getElementById('demo-banner').classList.remove('hidden');
   ['junior', 'senior'].forEach(dept => {
-    teachersByDept[dept] = DEMO_NAMES[dept].map((name, i) => ({ id: `d_${i + 1}`, name, pin: DEMO_PIN }));
+    teachersByDept[dept] = DEMO_NAMES[dept].map((name, i) => ({ id: `d_${i + 1}`, name }));
     stateByDept[dept] = teachersByDept[dept].map(() => emptyTeacherState());
   });
   orgName = '일산교회';
-  adminPw = DEMO_ADMIN_PW;
 }
 // 선생님 고유 ID 부여 (예전 명단은 순서대로 t_1, t_2 ...)
 teachersByDept.junior = ensureIds(teachersByDept.junior);
@@ -2356,7 +2444,7 @@ function setViewMode(mode) {
 }
 async function loadNotes(season) {
   const c = notesCache[season] = { notes: [], loading: true, error: '' };
-  const r = await api({ dept: 'senior', season, method: 'GET_NOTES' });
+  const r = await api({ dept: 'senior', season, method: 'GET_NOTES', body: actorBody() });
   if (notesCache[season] !== c) return;
   c.loading = false;
   if (r.ok) { c.notes = r.data.notes || []; c.loadedAt = new Date(); }
@@ -2374,7 +2462,7 @@ async function refreshNotes(manual) {
   const btn = () => document.getElementById('notes-refresh-btn');
   notesRefreshing = true;
   if (manual && btn()) { btn().disabled = true; btn().textContent = '불러오는 중...'; }
-  const r = await api({ dept: 'senior', season, method: 'GET_NOTES' });
+  const r = await api({ dept: 'senior', season, method: 'GET_NOTES', body: actorBody() });
   notesRefreshing = false;
   if (btn()) { btn().disabled = false; btn().textContent = '새로고침'; }
   if (notesCache[season] !== c) return;
