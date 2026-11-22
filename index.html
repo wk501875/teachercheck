@@ -285,6 +285,18 @@
   .notes-intro-head > div{flex:1;min-width:0;}
   .notes-title{font-family:var(--title);font-size:22px;line-height:1.2;}
   .notes-sub{font-size:13px;color:var(--sub);margin-top:2px;}
+  .note-row{padding:0;margin-bottom:8px;overflow:hidden;}
+  .note-row.archived{opacity:.6;border-style:dashed;}
+  .note-row-head{display:flex;align-items:center;gap:8px;width:100%;min-height:52px;padding:6px 14px;background:transparent;border:none;text-align:left;cursor:pointer;font-family:inherit;color:var(--ink);}
+  .note-row-head .note-name{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  .note-row-head .note-class{flex-shrink:0;}
+  .note-mine{flex-shrink:0;font-size:11px;font-weight:700;background:var(--green);border:1.5px solid var(--ink);border-radius:999px;padding:1px 8px;}
+  .note-chev{margin-left:auto;flex-shrink:0;transition:transform .2s;}
+  .note-row.open .note-chev{transform:rotate(180deg);}
+  .note-row.open{background:var(--sky-soft);}
+  .note-row-body{padding:2px 14px 14px;border-top:1.5px solid var(--line);background:var(--card);}
+  .note-row-actions{display:flex;justify-content:flex-end;margin-top:12px;}
+  .note-row-actions .btn{min-width:110px;}
   .note-card{display:block;width:100%;text-align:left;padding:14px;margin-bottom:10px;cursor:pointer;font-family:inherit;color:var(--ink);}
   .note-card.archived{opacity:.6;border-style:dashed;}
   .note-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
@@ -1542,7 +1554,7 @@ async function loginTeacher() {
 }
 function logout() {
   if (isPast()) enterCurrentSeason();
-  viewMode = 'check'; notesCache = {}; notesQuery = ''; closeNoteModal(); closeNoteDetail(); hideUndo();
+  viewMode = 'check'; notesCache = {}; notesQuery = ''; notesOpenId = null; closeNoteModal(); closeNoteDetail(); hideUndo();
   session = {role:null, teacherIdx:null, teacherId:null};
   ['admin-pw-input','teacher-pin-input'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('error'); });
   ['admin-error','teacher-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -2311,6 +2323,7 @@ let viewMode = 'check';      // 'check' = 체크리스트, 'notes' = 학생 특�
 let notesCache = {};         // 회기 → { notes, loading, error }
 let notesShowHidden = false;
 let notesQuery = '';         // 이름·분반·분반교사 검색어
+let notesOpenId = null;      // 목록에서 펼쳐 둔 학생
 let noteEdit = null;         // 편집 중인 학생 { studentId, isNew, version, base, archived }
 
 function esc(s) {
@@ -2365,16 +2378,22 @@ function renderNotes() {
   const pick = list => [...list]
     .sort((a, b) => noteClassOrder(a) - noteClassOrder(b) || String(a.data.name).localeCompare(String(b.data.name), 'ko'));
 
+  // 학생 한 줄: 이름·분반만, 누르면 그 자리에서 펼쳐서 상세 내용 (한 번에 한 명만 펼침)
   const card = n => {
-    const d = n.data || {};
-    const chips = NOTE_QUESTIONS.filter(q => d[q.key]).map(q => `<span class="note-chip">${esc(q.short)} <b>${esc(d[q.key])}</b></span>`).join('');
-    return `<button class="note-card card${n.archived ? ' archived' : ''}" data-sid="${esc(n.student_id)}">
-      <div class="note-head"><span class="note-name">${esc(d.name)}</span><span class="note-class">${esc(n.class_name || '분반 미정')}</span></div>
-      ${d.teacher ? `<div class="note-teacher">분반교사 ${esc(d.teacher)}</div>` : ''}
-      ${chips ? `<div class="note-chips">${chips}</div>` : ''}
-      ${d.memo ? `<div class="note-memo">${esc(d.memo)}</div>` : ''}
-      <div class="note-meta">${n.archived ? '숨긴 학생 · ' : ''}작성 ${esc(noteOwnerName(n))} · ${noteDateText(n.updated_at)}${canEditNote(n) ? ' · <b>내가 수정 가능</b>' : ''}</div>
-    </button>`;
+    const d = n.data || {}, open = notesOpenId === n.student_id, mine = canEditNote(n);
+    return `<div class="note-row card${n.archived ? ' archived' : ''}${open ? ' open' : ''}">
+      <button class="note-row-head" data-sid="${esc(n.student_id)}" aria-expanded="${open}">
+        <span class="note-name">${esc(d.name)}</span>
+        <span class="note-class">${esc(n.class_name || '분반 미정')}</span>
+        ${mine ? '<span class="note-mine">내 기록</span>' : ''}
+        <svg class="ico note-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      ${open ? `<div class="note-row-body">
+        ${noteDetailHtml(n)}
+        ${mine ? `<div class="note-row-actions"><button class="btn btn-sky" data-edit="${esc(n.student_id)}">수정</button></div>`
+               : (past ? '' : '<div class="nv-readonly">다른 선생님이 작성한 특이사항이라 보기만 할 수 있습니다.</div>')}
+      </div>` : ''}
+    </div>`;
   };
   el.innerHTML = `
     <div class="notes-back"><button class="btn btn-sm" onclick="setViewMode('check')"><svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>체크리스트로 돌아가기</button></div>
@@ -2407,7 +2426,11 @@ function renderNotes() {
       ${notesShowHidden ? hid.map(card).join('') : ''}`;
     const hb = document.getElementById('notes-hidden-btn');
     if (hb) hb.onclick = () => { notesShowHidden = !notesShowHidden; drawList(); };
-    box.querySelectorAll('[data-sid]').forEach(b => { b.onclick = () => openNoteDetail(b.dataset.sid); }); // 카드 → 상세보기
+    box.querySelectorAll('[data-sid]').forEach(b => { b.onclick = () => { // 줄을 누르면 펼치기/접기
+      notesOpenId = notesOpenId === b.dataset.sid ? null : b.dataset.sid;
+      drawList();
+    }; });
+    box.querySelectorAll('[data-edit]').forEach(b => { b.onclick = () => openNoteModal(b.dataset.edit); });
   }
   drawList();
 }
@@ -2449,6 +2472,15 @@ function noteOwnerName(note) {
 
 /* ── 상세보기 (누구나 보기만) ── */
 let noteViewId = null;
+function noteDetailHtml(note) {
+  const d = note.data || {};
+  return `
+    <div class="nv-row"><span class="nv-label">분반교사</span><span class="nv-value">${esc(d.teacher || '-')}</span></div>
+    ${NOTE_QUESTIONS.map(q => `<div class="nv-row"><span class="nv-label">${esc(q.label)}</span><span class="nv-value">${d[q.key] ? `<b>${esc(d[q.key])}</b>` : '-'}</span></div>`).join('')}
+    <div class="nv-memo-label">7. 기타 특이사항</div>
+    <div class="nv-memo">${d.memo ? esc(d.memo) : '<span class="nv-empty">작성된 내용이 없습니다</span>'}</div>
+    <div class="nv-meta">작성 ${esc(noteOwnerName(note))} · 마지막 수정 ${esc(note.updated_by || '-')} · ${noteDateText(note.updated_at)}${note.archived ? ' · 숨긴 학생' : ''}</div>`;
+}
 function openNoteDetail(studentId) {
   const c = notesCache[viewYear];
   const note = c && c.notes.find(n => n.student_id === studentId);
@@ -2457,12 +2489,7 @@ function openNoteDetail(studentId) {
   const d = note.data || {};
   document.getElementById('note-view-title').textContent = d.name || '학생 특이사항';
   document.getElementById('note-view-class').textContent = note.class_name || '분반 미정';
-  document.getElementById('note-view-body').innerHTML = `
-    <div class="nv-row"><span class="nv-label">분반교사</span><span class="nv-value">${esc(d.teacher || '-')}</span></div>
-    ${NOTE_QUESTIONS.map(q => `<div class="nv-row"><span class="nv-label">${esc(q.label)}</span><span class="nv-value">${d[q.key] ? `<b>${esc(d[q.key])}</b>` : '-'}</span></div>`).join('')}
-    <div class="nv-memo-label">7. 기타 특이사항</div>
-    <div class="nv-memo">${d.memo ? esc(d.memo) : '<span class="nv-empty">작성된 내용이 없습니다</span>'}</div>
-    <div class="nv-meta">작성 ${esc(noteOwnerName(note))} · 마지막 수정 ${esc(note.updated_by || '-')} · ${noteDateText(note.updated_at)}${note.archived ? ' · 숨긴 학생' : ''}</div>`;
+  document.getElementById('note-view-body').innerHTML = noteDetailHtml(note);
   const editBtn = document.getElementById('note-view-edit');
   const can = canEditNote(note);
   editBtn.classList.toggle('hidden', !can);
