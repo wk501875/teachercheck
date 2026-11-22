@@ -242,6 +242,7 @@
   .teacher-edit-num{font-size:12px;color:var(--sub);width:20px;flex-shrink:0;text-align:right;}
   .teacher-edit-name{flex:1;min-height:40px;border:none;background:transparent;font-family:inherit;font-size:15px;font-weight:600;color:var(--ink);outline:none;min-width:0;}
   .teacher-edit-pin{width:70px;min-height:40px;border:1.5px solid var(--ink);border-radius:12px;padding:4px 6px;font-family:inherit;font-size:15px;font-weight:700;text-align:center;outline:none;letter-spacing:2px;background:var(--card);color:var(--ink);}
+  .teacher-edit-move{min-height:44px;padding:0 10px;border-radius:999px;border:1.5px solid var(--ink);background:var(--sky);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;}
   .teacher-edit-del{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--ink);background:var(--apricot);font-size:18px;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;}
   .add-teacher-row{display:flex;gap:6px;margin-bottom:16px;}
   .add-teacher-input{flex:1;min-width:0;min-height:44px;border:1.5px solid var(--ink);border-radius:14px;padding:8px 12px;font-family:inherit;font-size:15px;color:var(--ink);background:var(--card);outline:none;}
@@ -987,6 +988,20 @@ async function demoApi(p) {
     db.records[b.teacher_id] = { state: clone(b.state), version: v + 1 };
     return ok({ ok: true, version: v + 1 });
   }
+  if (p.method === 'MOVE_TEACHER') {
+    // 실제 서버와 같은 동작: 관리자 확인 → 기록 복사 → 새 부서 명단에 추가 → 원래 부서에서 빼기
+    if (b.actor_id !== 'admin' || b.actor_secret !== demoDB.adminPw) return fail(403, { error: '관리자 비밀번호가 맞지 않습니다.', code: 'not_authorized' });
+    const to = p.dept === 'junior' ? 'senior' : 'junior', src = db, dst = demoDB[to];
+    const t = src.teachers.find(x => x.id === b.teacher_id);
+    if (!t) return fail(404, { error: '명단에 없는 선생님입니다.' });
+    let newId = t.id;
+    while (dst.teachers.some(x => x.id === newId) || dst.records[newId]) newId = 'u_' + Math.random().toString(36).slice(2, 9);
+    if (src.records[t.id]) dst.records[newId] = { state: clone(src.records[t.id].state), version: 1 };
+    dst.teachers.push({ id: newId, name: t.name, pin: t.pin });
+    src.teachers = src.teachers.filter(x => x.id !== t.id);
+    src.rosterVer = dst.rosterVer = new Date(Date.now() + 1).toISOString();
+    return ok({ ok: true, to, new_id: newId, name: t.name });
+  }
   if (p.method === 'SAVE_ROSTER') {
     db.teachers = clone(b.teachers || []);
     db.locked = clone(b.locked_months || {});
@@ -1680,9 +1695,11 @@ function renderModalList() {
       <input class="teacher-edit-pin" value="${t.pin && t.pin.length === 64 ? '' : (t.pin||'')}"
         placeholder="${t.pin && t.pin.length === 64 ? '재설정필요' : 'PIN'}"
         data-i="${i}" data-hashed="0" maxlength="4" />
+      <button class="teacher-edit-move" data-i="${i}" title="${lockModalActiveDept === 'junior' ? '중고등부' : '유초등부'}로 이동">이동</button>
       <button class="teacher-edit-del" data-i="${i}">×</button>`;
     wrap.appendChild(row);
   });
+  wrap.querySelectorAll('.teacher-edit-move').forEach(btn => btn.addEventListener('click', e => moveTeacherFromModal(+e.currentTarget.dataset.i)));
   wrap.querySelectorAll('.teacher-edit-name').forEach(inp =>
     inp.addEventListener('input', e => { modalTeachers[+e.target.dataset.i].name = e.target.value; }));
   wrap.querySelectorAll('.teacher-edit-pin').forEach(inp =>
@@ -1706,6 +1723,36 @@ function renderModalList() {
     modalTeachers.splice(idx, 1); renderModalList();
   }));
 }
+/* ── 선생님 부서 이동 (이름·PIN·올해 기록을 함께 옮김, 서버에서 처리) ── */
+function teacherListSame(a, b) {
+  const pick = list => JSON.stringify((list || []).map(t => [t.id, t.name, t.pin]));
+  return pick(a) === pick(b);
+}
+async function moveTeacherFromModal(idx) {
+  if (isPast()) { showToast(PAST_MSG); return; }
+  const from = lockModalActiveDept, to = from === 'junior' ? 'senior' : 'junior';
+  const t = modalTeachers[idx];
+  // 관리 창에서 고친 내용이 저장되지 않았으면 먼저 저장하게 함 (저장 안 된 명단이 이동 결과를 덮어쓰지 않도록)
+  const drafts = { ...modalDrafts, [from]: modalTeachers };
+  const unsaved = Object.keys(drafts).some(d => !teacherListSame(drafts[d], teachersByDept[d]));
+  if (unsaved || !t || !teachersByDept[from].some(x => x.id === t.id)) {
+    showToast('관리 창에서 바꾼 내용을 먼저 "저장"한 뒤 이동해주세요'); return;
+  }
+  if (!confirm(`${t.name} 선생님을 ${DEPTS[to].label}(으)로 옮길까요?\n이름·PIN과 올해 출석·성경읽기 기록이 함께 옮겨집니다.`)) return;
+  await flushServerSaves(); // 아직 서버에 안 올라간 기록을 먼저 저장
+  if (pendingRoster.junior || pendingRoster.senior) { showToast('명단 저장이 아직 끝나지 않았습니다. 잠시 후 다시 눌러주세요'); return; }
+  const r = await api({ dept: from, season: YEAR, method: 'MOVE_TEACHER', body: {
+    teacher_id: t.id, actor_id: 'admin', actor_secret: session.secret || '',
+  }});
+  if (!r.ok) { showToast('옮기지 못했습니다: ' + (r.data.error || ('HTTP ' + r.status))); return; }
+  try { await reloadFromServer(); } catch (e) { console.error(e); }
+  modalDrafts = {};
+  modalTeachers = (teachersByDept[from] || []).map(x => ({ ...x }));
+  renderModalList();
+  refreshScreen();
+  showToast(`${t.name} 선생님을 ${DEPTS[to].label}(으)로 옮겼습니다`);
+}
+
 function addTeacherFromModal() {
   const name = document.getElementById('add-name-input').value.trim();
   const pin = document.getElementById('add-pin-input').value.trim();
