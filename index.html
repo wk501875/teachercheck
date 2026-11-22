@@ -36,9 +36,11 @@
     /* 예전 이름 호환 */
     --text:var(--ink); --muted:var(--sub); --border:var(--line);
     --pink:var(--apricot); --gold:var(--yellow); --sky-light:var(--sky-soft);
+    /* O·X 칸 색: 사계절 공통 (세이지 · 스톤그레이) */
+    --o:#C5DDB8; --x:#DCD6CE;
     --title:'Black Han Sans',sans-serif;
   }
-  /* ── 계절 테마 (O 연두·X 살구는 사계절 같음) ── */
+  /* ── 계절 테마 (O·X 칸 색 --o/--x 는 사계절 같음) ── */
   html[data-season="spring"]{--ink:#2F3A30;--bg:#FBE9EC;--card:#FFFBFB;--sub:#626C62;--line:#EED5DA;--sky:#F2A9B9;--sky-soft:#FCE3E8;--yellow:#D3E6C1;}
   html[data-season="summer"]{--ink:#10344F;--bg:#DCF1F4;--card:#FBFEFF;--sub:#48647A;--line:#BEDFE6;--sky:#6CCAD9;--sky-soft:#D0EEF3;--yellow:#FFD978;}
   html[data-season="autumn"]{--ink:#3A2619;--bg:#F5E4D2;--card:#FFFAF5;--sub:#6D5544;--line:#E6D0BB;--sky:#E5946B;--sky-soft:#F8DACB;--yellow:#D4C47A;}
@@ -70,6 +72,8 @@
   .btn-gold{background:var(--yellow);}
   .btn-green{background:var(--green);}
   .btn-pink{background:var(--apricot);}
+  .btn-o{background:var(--o);}
+  .btn-x{background:var(--x);}
   .btn-sm{padding:0 14px;font-size:13px;}
   .btn-lg{min-height:56px;padding:0 24px;font-size:16px;}
   .btn-full{width:100%;}
@@ -81,8 +85,8 @@
   /* ── O/X 안내 ── */
   .ox-legend{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;font-size:13px;color:var(--ink);font-weight:600;margin:-2px 0 12px;}
   .ox-legend .lg{display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border:1.5px solid var(--ink);border-radius:999px;font-size:12px;font-weight:700;}
-  .ox-legend .lg-o{background:var(--green);}
-  .ox-legend .lg-x{background:var(--apricot);}
+  .ox-legend .lg-o{background:var(--o);}
+  .ox-legend .lg-x{background:var(--x);}
   .ox-legend .lg-e{background:var(--card);}
   /* ── 관리 창 ── */
   .settings-dept{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:4px 0 12px;}
@@ -207,7 +211,7 @@
   .teacher-tabs,.month-tabs{display:flex;gap:6px;width:max-content;padding:2px;}
   .t-tab,.m-tab{display:inline-flex;align-items:center;gap:5px;min-height:44px;padding:0 16px;border-radius:999px;border:1.5px solid var(--ink);background:var(--card);font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;}
   .t-tab.active,.m-tab.active{background:var(--sky);}
-  .tab-dot{width:8px;height:8px;border-radius:50%;background:var(--green);border:1.5px solid var(--ink);}
+  .tab-dot{width:8px;height:8px;border-radius:50%;background:var(--o);border:1.5px solid var(--ink);}
   .m-tab.locked{background:#FFF1EA;}
   .m-tab.locked.active{background:var(--apricot);}
   .m-tab svg.ico{width:16px;height:16px;}
@@ -244,8 +248,8 @@
   .this-week-tag{font-size:12px;font-weight:700;background:var(--sky);border:1.5px solid var(--ink);border-radius:999px;padding:1px 8px;white-space:nowrap;}
   .week-bulk{display:flex;gap:4px;margin-left:auto;flex-shrink:0;}
   .rbtn{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--ink);background:var(--card);font-family:'IBM Plex Sans KR',sans-serif;font-weight:700;font-size:19px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;}
-  .rbtn.o{background:var(--green);}
-  .rbtn.x{background:var(--apricot);}
+  .rbtn.o{background:var(--o);}
+  .rbtn.x{background:var(--x);}
   .rbtn svg.ico{width:18px;height:18px;}
   .rbtn:disabled{opacity:.4;cursor:not-allowed;}
   .row-label{font-size:13px;font-weight:700;color:var(--ink);padding:0 4px;margin:2px 0 4px;}
@@ -259,8 +263,8 @@
   .cell.o .c-mark::before{content:'';position:absolute;inset:1px;border:2.5px solid var(--ink);border-radius:50%;}
   .cell.x .c-mark::before,.cell.x .c-mark::after{content:'';position:absolute;left:50%;top:50%;width:21px;height:2.5px;margin:-1.25px 0 0 -10.5px;background:var(--ink);border-radius:2px;transform:rotate(45deg);}
   .cell.x .c-mark::after{transform:rotate(-45deg);}
-  .cell.o{background:var(--green);border-color:var(--ink);}
-  .cell.x{background:var(--apricot);border-color:var(--ink);}
+  .cell.o{background:var(--o);border-color:var(--ink);}
+  .cell.x{background:var(--x);border-color:var(--ink);}
   .cell.today{border:3px solid var(--ink);}
   .cell.today:not(.o):not(.x){background:var(--sky);}
   .cell.today .c-top{color:var(--ink);}
@@ -283,7 +287,7 @@
   .bar-row{display:grid;grid-template-columns:70px 1fr 44px;align-items:center;gap:8px;margin-bottom:8px;}
   .bar-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .bar-track{height:16px;border:1.5px solid var(--ink);border-radius:999px;background:var(--card);overflow:hidden;}
-  .bar-fill{height:100%;background:var(--green);border-right:1.5px solid var(--ink);}
+  .bar-fill{height:100%;background:var(--o);border-right:1.5px solid var(--ink);}
   .bar-fill.zero{border-right:none;}
   .bar-val{font-size:13px;font-weight:700;text-align:right;line-height:1.1;}
   .bar-val small{display:block;font-size:10px;font-weight:500;color:var(--sub);}
@@ -2141,8 +2145,8 @@ function buildMainCard() {
   const bulk = document.createElement('div');
   bulk.className = 'bulk-bar';
   bulk.innerHTML = `<span class="bulk-label">이번 달 전체 참석</span>
-    <button class="btn btn-sm btn-green" data-bulk="O">O 전체</button>
-    <button class="btn btn-sm btn-pink" data-bulk="X">X 전체</button>
+    <button class="btn btn-sm btn-o" data-bulk="O">O 전체</button>
+    <button class="btn btn-sm btn-x" data-bulk="X">X 전체</button>
     <button class="btn btn-sm" data-bulk="">초기화</button>`;
   root.appendChild(bulk);
   if (!past) {

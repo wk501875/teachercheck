@@ -47,8 +47,8 @@
 ## 화면 디자인
 - 앱 이름: "일산교회 교사 체크리스트"(홈 화면 짧은 이름 "교사 체크리스트"). 이미지: `assets/church-logo.png`, `assets/church-illustration.jpg`.
 - 글꼴: 제목·큰 숫자 Black Han Sans, 본문 IBM Plex Sans KR. 사람 이름이 들어가는 곳은 본문 글꼴(Black Han Sans에 없는 글자가 섞여 보이지 않게).
-- 색: 기본(테마가 없을 때) 글자·테두리 #0E2A47 / 바탕 #FBF8F1 / 카드 #FFFDF8 / 보조 글자 #44586E / 옅은 선 #C9D3DC / 하늘색 #A9D8F0 / 연한 하늘 #E1F1FA / 노랑 #F7DC7A / 연두(O) #BFDD9C / 살구(X) #FFBE9F.
-- **계절 테마(자동)**: 한국 날짜 기준 3~5월 봄 · 6~8월 여름 · 9~11월 가을 · 12~2월 겨울. `<head>`의 작은 스크립트가 `<html data-season="...">`을 정하고, CSS 변수만 계절별로 바꿈(`html[data-season=...]`). **O 연두·X 살구는 사계절 같음**. 확인용으로 주소 끝에 `?season=spring|summer|autumn|winter`.
+- 색: 기본(테마가 없을 때) 글자·테두리 #0E2A47 / 바탕 #FBF8F1 / 카드 #FFFDF8 / 보조 글자 #44586E / 옅은 선 #C9D3DC / 하늘색 #A9D8F0 / 연한 하늘 #E1F1FA / 노랑 #F7DC7A / 연두 #BFDD9C / 살구 #FFBE9F(로그아웃·경고 등).
+- **계절 테마(자동)**: 한국 날짜 기준 3~5월 봄 · 6~8월 여름 · 9~11월 가을 · 12~2월 겨울. `<head>`의 작은 스크립트가 `<html data-season="...">`을 정하고, CSS 변수만 계절별로 바꿈(`html[data-season=...]`). **O·X 칸 색은 사계절 같음: O 세이지 #C5DDB8 · X 스톤그레이 #DCD6CE** (CSS 변수 `--o`/`--x`, O·X 칸·주 버튼·"O 전체/X 전체"·안내 표시·입력 표시 점·막대에 사용. 로그아웃 등 다른 버튼 색은 그대로). 확인용으로 주소 끝에 `?season=spring|summer|autumn|winter`.
   - 봄(벚꽃·숲) 글자 #2F3A30 / 바탕 #FBE9EC / 포인트(중고등부·선택) #F2A9B9 / 유초등부 #D3E6C1
   - 여름(바다·코랄) 글자 #10344F / 바탕 #DCF1F4 / 포인트 #6CCAD9 / 유초등부 #FFD978
   - 가을(테라코타·올리브) 글자 #3A2619 / 바탕 #F5E4D2 / 포인트 #E5946B / 유초등부 #D4C47A
