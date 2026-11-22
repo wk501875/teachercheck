@@ -67,6 +67,14 @@
   .setup-details .cloud-setup-box{margin-bottom:0;}
   /* ── 특이사항 검색 ── */
   .notes-search .field-input{margin-bottom:10px;}
+  .notes-sort{margin:0 0 12px;}
+  .notes-sort .btn{padding:0 8px;font-size:13px;}
+  .notes-group{display:flex;align-items:baseline;gap:8px;margin:16px 4px 8px;font-family:'Black Han Sans',sans-serif;font-size:17px;color:var(--ink);}
+  .notes-group:first-child{margin-top:4px;}
+  .notes-group span{font-family:'IBM Plex Sans KR',sans-serif;font-size:13px;font-weight:600;color:var(--sub);}
+  .notes-refresh{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin:0 0 10px;}
+  .notes-refresh .notes-updated{font-size:13px;color:var(--sub);}
+  .notes-refresh .btn{min-height:44px;}
   .notes-count{font-size:13px;color:var(--sub);font-weight:600;margin:0 4px 8px;}
 
   /* ── 미리보기(데모) 안내 ── */
@@ -812,8 +820,8 @@ function parseTeacherState(ts) {
     return fixMonthState({att: s.att || [], bible: s.bible || {}}, mo);
   });
 }
-function hhmm() {
-  const now = new Date();
+function hhmm(d) {
+  const now = d || new Date();
   return `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 }
 
@@ -1554,7 +1562,7 @@ async function loginTeacher() {
 }
 function logout() {
   if (isPast()) enterCurrentSeason();
-  viewMode = 'check'; notesCache = {}; notesQuery = ''; notesOpenId = null; closeNoteModal(); closeNoteDetail(); hideUndo();
+  viewMode = 'check'; notesCache = {}; notesQuery = ''; notesOpenId = null; notesSort = 'class'; closeNoteModal(); closeNoteDetail(); hideUndo();
   session = {role:null, teacherIdx:null, teacherId:null};
   ['admin-pw-input','teacher-pin-input'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('error'); });
   ['admin-error','teacher-error'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -2324,6 +2332,9 @@ let notesCache = {};         // 회기 → { notes, loading, error }
 let notesShowHidden = false;
 let notesQuery = '';         // 이름·분반·분반교사 검색어
 let notesOpenId = null;      // 목록에서 펼쳐 둔 학생
+let notesSort = 'class';     // 목록 정렬: class(분반순) / name(이름순) / recent(최근 수정순)
+let notesDrawList = null;    // 목록 부분만 다시 그리기 (검색칸 입력 중일 때)
+let notesRefreshing = false;
 let noteEdit = null;         // 편집 중인 학생 { studentId, isNew, version, base, archived }
 
 function esc(s) {
@@ -2348,12 +2359,39 @@ async function loadNotes(season) {
   const r = await api({ dept: 'senior', season, method: 'GET_NOTES' });
   if (notesCache[season] !== c) return;
   c.loading = false;
-  if (r.ok) c.notes = r.data.notes || [];
+  if (r.ok) { c.notes = r.data.notes || []; c.loadedAt = new Date(); }
   else c.error = r.data.code === 'notes_table_missing'
     ? '서버에 학생 특이사항 저장 공간이 아직 없습니다. 관리자에게 알려주세요. (SQL 실행 필요)'
     : `학생 특이사항을 불러오지 못했습니다: ${plain(r.data.error || ('HTTP ' + r.status))}`;
   if (viewMode === 'notes' && viewYear === season) renderNotes();
 }
+// 특이사항 목록 새로 불러오기: 보는 동안 30초마다 자동, "새로고침" 버튼으로 바로
+// 특이사항은 지워지지 않으므로(숨기기만) 학생별로 더 최신 버전을 골라 합침 → 방금 내가 저장한 내용이 사라지지 않음
+async function refreshNotes(manual) {
+  if (viewMode !== 'notes' || notesRefreshing) return;
+  const season = viewYear, c = notesCache[season];
+  if (!c || c.loading) { if (manual) { delete notesCache[season]; renderNotes(); } return; }
+  const btn = () => document.getElementById('notes-refresh-btn');
+  notesRefreshing = true;
+  if (manual && btn()) { btn().disabled = true; btn().textContent = '불러오는 중...'; }
+  const r = await api({ dept: 'senior', season, method: 'GET_NOTES' });
+  notesRefreshing = false;
+  if (btn()) { btn().disabled = false; btn().textContent = '새로고침'; }
+  if (notesCache[season] !== c) return;
+  if (!r.ok) { if (manual) showToast('새로 불러오지 못했습니다. 잠시 후 다시 눌러주세요.'); return; }
+  const map = new Map(c.notes.map(n => [n.student_id, n]));
+  (r.data.notes || []).forEach(n => { const cur = map.get(n.student_id); if (!cur || (n.version || 0) >= (cur.version || 0)) map.set(n.student_id, n); });
+  c.notes = [...map.values()]; c.error = ''; c.loadedAt = new Date();
+  if (viewMode === 'notes' && viewYear === season) {
+    const s = document.getElementById('notes-search');
+    if (s && document.activeElement === s && notesDrawList) notesDrawList(); // 검색 입력 중이면 키보드가 닫히지 않게 목록만
+    else renderNotes();
+  }
+  if (manual) showToast('최신 내용으로 바꿨습니다');
+}
+setInterval(() => { if (document.visibilityState === 'visible' && viewMode === 'notes' && !isPast()) refreshNotes(false); }, 30 * 1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && viewMode === 'notes') refreshNotes(false); });
+
 function noteClassOrder(n) {
   const i = NOTE_CLASSES.indexOf(n.class_name);
   return i === -1 ? NOTE_CLASSES.length : i;
@@ -2372,11 +2410,24 @@ function renderNotes() {
     el.innerHTML = '<div class="card notes-empty">학생 특이사항을 불러오는 중...</div>';
     return;
   }
-  const shown = c.notes.filter(n => !n.archived);
-  const hiddenNotes = c.notes.filter(n => n.archived);
-  // 분반 순서 → 이름 순서로 정렬해서 한 목록으로 보여줌
-  const pick = list => [...list]
-    .sort((a, b) => noteClassOrder(a) - noteClassOrder(b) || String(a.data.name).localeCompare(String(b.data.name), 'ko'));
+  let shown = c.notes.filter(n => !n.archived);
+  let hiddenNotes = c.notes.filter(n => n.archived);
+  // 정렬: 분반순(중등형제 → 중등자매 → 고등형제 → 고등자매, 같은 반은 이름순) / 이름순 / 최근 수정순
+  const byName = (a, b) => String(a.data.name).localeCompare(String(b.data.name), 'ko');
+  const pick = list => [...list].sort(
+    notesSort === 'name' ? byName
+    : notesSort === 'recent' ? ((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')) || byName(a, b))
+    : ((a, b) => noteClassOrder(a) - noteClassOrder(b) || byName(a, b)));
+  // 분반순일 때는 반마다 제목(반 이름 · 몇 명)을 붙임
+  const listHtml = list => {
+    if (notesSort !== 'class') return list.map(card).join('');
+    const count = {}; list.forEach(n => { const k = n.class_name || '분반 미정'; count[k] = (count[k] || 0) + 1; });
+    let prev = null;
+    return list.map(n => { const k = n.class_name || '분반 미정';
+      const head = k !== prev ? `<div class="notes-group">${esc(k)}<span>${count[k]}명</span></div>` : ''; prev = k;
+      return head + card(n); }).join('');
+  };
+  const sortBtn = (v, label) => `<button class="btn${notesSort === v ? ' btn-sky' : ''}" data-sort="${v}">${label}</button>`;
 
   // 학생 한 줄: 이름·분반만, 누르면 그 자리에서 펼쳐서 상세 내용 (한 번에 한 명만 펼침)
   const card = n => {
@@ -2406,24 +2457,35 @@ function renderNotes() {
       </div>
       <div class="notes-actions">
         ${past ? '' : '<button class="btn btn-sky" onclick="openNoteModal()">학생 추가</button>'}
-        <button class="btn" onclick="downloadNotes()"${shown.length ? '' : ' disabled'}>엑셀 다운로드</button>
+        <button class="btn" id="notes-excel-btn" onclick="downloadNotes()"${shown.length ? '' : ' disabled'}>엑셀 다운로드</button>
       </div>
     </div>
     ${c.error ? `<div class="save-error"><span>${esc(c.error)}</span><button class="btn btn-sm btn-pink" onclick="delete notesCache[viewYear]; renderNotes()">다시 시도</button></div>` : ''}
-    ${c.notes.length ? `<div class="notes-search"><input class="field-input" id="notes-search" type="search" placeholder="이름·분반·분반교사로 찾기" value="${esc(notesQuery)}" autocomplete="off" /></div>` : ''}
+    <div class="notes-refresh"><span class="notes-updated" id="notes-updated">${c.loadedAt ? `${hhmm(c.loadedAt)} 기준` : ''}</span><button class="btn btn-sm" id="notes-refresh-btn" onclick="refreshNotes(true)">새로고침</button></div>
+    ${c.notes.length ? `<div class="notes-search"><input class="field-input" id="notes-search" type="search" placeholder="이름·분반·분반교사로 찾기" value="${esc(notesQuery)}" autocomplete="off" /></div>
+    <div class="seg notes-sort">${sortBtn('class', '분반순')}${sortBtn('name', '이름순')}${sortBtn('recent', '최근 수정순')}</div>` : ''}
     <div id="notes-list"></div>`;
+  el.querySelectorAll('[data-sort]').forEach(b => { b.onclick = () => {
+    notesSort = b.dataset.sort; notesOpenId = null;
+    el.querySelectorAll('[data-sort]').forEach(x => x.classList.toggle('btn-sky', x === b));
+    drawList();
+  }; });
   const search = document.getElementById('notes-search');
   if (search) search.addEventListener('input', () => { notesQuery = search.value; drawList(); }); // 목록만 다시 그려서 입력 중에도 키보드가 닫히지 않음
+  notesDrawList = drawList;
   function drawList() {
+    shown = c.notes.filter(n => !n.archived); hiddenNotes = c.notes.filter(n => n.archived); // 자동 새로고침 뒤에도 최신 목록
+    const xb = document.getElementById('notes-excel-btn'); if (xb) xb.disabled = !shown.length;
+    const up = document.getElementById('notes-updated'); if (up) up.textContent = c.loadedAt ? `${hhmm(c.loadedAt)} 기준` : '';
     const q = notesQuery.trim().toLowerCase();
     const match = n => !q || [n.data.name, n.class_name, n.data.teacher].some(v => String(v || '').toLowerCase().includes(q));
     const list = pick(shown.filter(match)), hid = pick(hiddenNotes.filter(match));
     const box = document.getElementById('notes-list');
     box.innerHTML = `
       ${q ? `<div class="notes-count">찾은 학생 ${list.length}명</div>` : ''}
-      ${list.length ? list.map(card).join('') : `<div class="card notes-empty">${c.error ? '' : (q ? '찾는 학생이 없습니다.' : (past ? '작성된 특이사항이 없습니다.' : '아직 작성된 학생이 없습니다.<br>위의 "학생 추가"를 눌러 시작하세요.'))}</div>`}
+      ${list.length ? listHtml(list) : `<div class="card notes-empty">${c.error ? '' : (q ? '찾는 학생이 없습니다.' : (past ? '작성된 특이사항이 없습니다.' : '아직 작성된 학생이 없습니다.<br>위의 "학생 추가"를 눌러 시작하세요.'))}</div>`}
       ${hid.length ? `<div class="notes-hidden-toggle"><button class="btn btn-sm" id="notes-hidden-btn">숨긴 학생 ${hid.length}명 ${notesShowHidden ? '접기' : '보기'}</button></div>` : ''}
-      ${notesShowHidden ? hid.map(card).join('') : ''}`;
+      ${notesShowHidden ? listHtml(hid) : ''}`;
     const hb = document.getElementById('notes-hidden-btn');
     if (hb) hb.onclick = () => { notesShowHidden = !notesShowHidden; drawList(); };
     box.querySelectorAll('[data-sid]').forEach(b => { b.onclick = () => { // 줄을 누르면 펼치기/접기
